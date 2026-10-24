@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <script>
+        (function() {
+            function makeFetchWritable( descriptor ) {
+                if (!descriptor || typeof descriptor !== 'object') return descriptor;
+                var d = Object.assign({}, descriptor);
+                d.configurable = true;
+                if ('get' in d || 'set' in d) {
+                    var origGet = d.get;
+                    var origSet = d.set;
+                    var currentVal;
+                    var hasVal = false;
+                    d.get = function() {
+                        if (hasVal) return currentVal;
+                        return typeof origGet === 'function' ? origGet.call(this) : currentVal;
+                    };
+                    d.set = function(fn) {
+                        currentVal = fn;
+                        hasVal = true;
+                        if (typeof origSet === 'function') {
+                            try { origSet.call(this, fn); } catch (e) {}
+                        }
+                    };
+                } else {
+                    d.writable = true;
+                }
+                return d;
+            }
+            try {
+                var origDefineProperty = Object.defineProperty;
+                Object.defineProperty = function(target, prop, descriptor) {
+                    if (prop === 'fetch' && (target === window || (typeof Window !== 'undefined' && target === Window.prototype))) {
+                        descriptor = makeFetchWritable(descriptor);
+                    }
+                    return origDefineProperty.call(Object, target, prop, descriptor);
+                };
+                if (typeof Reflect !== 'undefined' && typeof Reflect.defineProperty === 'function') {
+                    var origReflectDefine = Reflect.defineProperty;
+                    Reflect.defineProperty = function(target, prop, descriptor) {
+                        if (prop === 'fetch' && (target === window || (typeof Window !== 'undefined' && target === Window.prototype))) {
+                            descriptor = makeFetchWritable(descriptor);
+                        }
+                        return origReflectDefine.call(Reflect, target, prop, descriptor);
+                    };
+                }
+            } catch (e) {}
+            try {
+                var currentFetch = window.fetch;
+                if (typeof currentFetch === 'function') {
+                    Object.defineProperty(window, 'fetch', {
+                        configurable: true,
+                        enumerable: true,
+                        get: function() { return currentFetch; },
+                        set: function(fn) { currentFetch = fn; }
+                    });
+                }
+            } catch (e) {}
+            try {
+                if (typeof Window !== 'undefined' && Window.prototype) {
+                    var protoFetch = Window.prototype.fetch;
+                    if (typeof protoFetch === 'function') {
+                        Object.defineProperty(Window.prototype, 'fetch', {
+                            configurable: true,
+                            enumerable: true,
+                            get: function() { return protoFetch; },
+                            set: function(fn) { protoFetch = fn; }
+                        });
+                    }
+                }
+            } catch (e) {}
+            window.addEventListener('error', function(ev) {
+                if ((ev && ev.filename && String(ev.filename).indexOf('chrome-extension://') === 0) ||
+                    (ev && ev.message && String(ev.message).indexOf('Cannot set property fetch') !== -1)) {
+                    ev.stopImmediatePropagation();
+                    ev.preventDefault();
+                    return true;
+                }
+            }, true);
+        })();
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="admin_page_title">مركز التحكم الشامل للنظام | OrbexDesk</title>
+    <link rel="icon" type="image/png" href="/assets/orbex-logo.png">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link id="bootstrap-css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="i18n.js"></script>
+    <style>
+        :root {
+            --orbex-crimson: #B91C1C;
+            --orbex-crimson-hover: #991B1B;
+            --primary: #B91C1C;
+            --primary-hover: #991B1B;
+        }
+        body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; color: #1e293b; transition: background 0.2s, color 0.2s; }
+        .sidebar { width: 265px; background: linear-gradient(180deg, #0b1120 0%, #0f172a 100%); color: #fff; position: fixed; top: 0; right: 0; bottom: 0; padding: 20px; display: flex; flex-direction: column; z-index: 1030; border-left: 1px solid #1e293b; }
+        .sidebar-brand { font-size: 18px; font-weight: 800; color: #fff; text-decoration: none; display: flex; align-items: center; gap: 8px; }
+        .nav-pills .nav-link { color: #94a3b8; font-weight: 600; padding: 10px 14px; border-radius: 10px; margin-bottom: 5px; display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; transition: all 0.15s ease; }
+        .nav-pills .nav-link:hover { background-color: rgba(255,255,255,0.06); color: #f8fafc; }
+        .nav-pills .nav-link.active { background-color: #b91c1c; color: #fff; box-shadow: 0 4px 12px rgba(185, 28, 28, 0.35); }
+        .btn-primary { background-color: #b91c1c !important; border-color: #b91c1c !important; }
+        .btn-primary:hover, .btn-primary:focus { background-color: #991b1b !important; border-color: #991b1b !important; }
+        .btn-outline-primary { color: #b91c1c !important; border-color: #b91c1c !important; }
+        .btn-outline-primary:hover { background-color: #b91c1c !important; color: #fff !important; }
+        .text-primary { color: #b91c1c !important; }
+        .badge.bg-primary { background-color: #b91c1c !important; }
+        .main-content { margin-right: 265px; padding: 22px 28px; }
+        .card-custom { background: #fff; border-radius: 14px; border: 1px solid #e2e8f0; padding: 22px; margin-bottom: 22px; box-shadow: 0 1px 3px rgba(15,23,42,0.03); }
+        .table thead th { position: sticky; top: 0; z-index: 10; }
+        .admin-section { display: none; }
+        .admin-section.active { display: block; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="d-flex align-items-center justify-content-between pb-3 border-bottom border-secondary mb-2">
+        <a href="dashboard.html" class="sidebar-brand text-decoration-none d-flex align-items-center gap-2">
+            <div style="width: 34px; height: 34px; background: #fff; border-radius: 8px; padding: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <img src="/assets/orbex-logo.png" alt="OrbexDesk" style="width: 100%; height: 100%; object-fit: contain;">
+            </div>
+            <div class="d-flex flex-column" style="line-height: 1.1;">
+                <span style="font-size: 18px; font-weight: 900; color: #fff; letter-spacing: -0.5px;">Orbex<span style="color: #b91c1c;">Desk</span></span>
+                <span style="font-size: 10px; color: #94a3b8; font-weight: 600;">إدارة النظام</span>
+            </div>
+        </a>
+        <div class="d-flex align-items-center gap-1">
+            <!-- زر تبديل اللغة المباشر (Sidebar Language Toggle) -->
+            <button type="button" class="btn btn-outline-secondary btn-sm text-white border-secondary d-inline-flex align-items-center gap-1 px-2 py-1" id="langToggleBtn" onclick="i18n.toggleLanguage()" title="تبديل لغة النظام | Switch Language" style="cursor: pointer; user-select: none;">
+                <i class="bi bi-translate text-danger" style="pointer-events: none;"></i>
+                <span style="font-size: 11px; pointer-events: none;" class="lang-btn-label" id="currentLangLabel">English</span>
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm text-white border-secondary px-2 py-1" onclick="toggleAdminDarkMode()" id="adminDarkBtn" title="الوضع الليلي / النهاري" data-i18n-title="dark_mode_title">
+                <i class="bi bi-moon-stars-fill" style="font-size: 11px;"></i>
+            </button>
+        </div>
+    </div>
+    
+    <ul class="nav nav-pills flex-column mt-2 mb-auto">
+        <li class="nav-item"><a class="nav-link active" onclick="showTab('tabUsers', this)"><i class="bi bi-people-fill"></i> <span data-i18n="admin_tab_1">1. الموظفين والصلاحيات</span></a></li>
+        <li class="nav-item"><a class="nav-link" onclick="showTab('tabDepts', this)"><i class="bi bi-building-fill-gear"></i> <span data-i18n="admin_tab_2">2. الأقسام وساعات الـ SLA</span></a></li>
+        <li class="nav-item"><a class="nav-link" onclick="showTab('tabIssues', this)"><i class="bi bi-card-checklist"></i> <span data-i18n="admin_tab_3">3. المشاكل والعناوين الثابتة</span></a></li>
+        <li class="nav-item"><a class="nav-link" onclick="showTab('tabCanned', this)"><i class="bi bi-lightning-charge-fill"></i> <span data-i18n="admin_tab_4">4. الردود التلقائية السريعة</span></a></li>
+        <li class="nav-item"><a class="nav-link" onclick="showTab('tabLists', this)"><i class="bi bi-credit-card-2-front-fill"></i> <span data-i18n="admin_tab_5">5. بوابات الدفع والقوائم</span></a></li>
+        <li class="nav-item"><a class="nav-link" onclick="showTab('tabBannerBackup', this)"><i class="bi bi-megaphone-fill text-warning"></i> <span data-i18n="admin_tab_6">6. التنبيه العام والنسخ الاحتياطي</span></a></li>
+        <li class="nav-item"><a class="nav-link" onclick="showTab('tabLogs', this)"><i class="bi bi-shield-lock-fill"></i> <span data-i18n="admin_tab_7">7. سجل الرقابة والأمان (IP)</span></a></li>
+        <li class="nav-item"><a class="nav-link" onclick="showTab('tabRulesReport', this)"><i class="bi bi-robot"></i> <span data-i18n="admin_tab_8">8. محرك القواعد وتقارير التدقيق</span></a></li>
+    </ul>
+
+    <div class="border-top border-secondary pt-3">
+        <a href="dashboard.html" class="btn btn-primary w-100 fw-bold"><i class="bi bi-arrow-right-circle me-1"></i> <span data-i18n="back_to_dashboard">العودة للوحة التذاكر</span></a>
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <button type="button" class="btn btn-light border btn-sm fw-bold" onclick="toggleAdminSidebar()" data-i18n-title="toggle_sidebar_tooltip">
+            <i class="bi bi-layout-sidebar-inset-reverse me-1"></i> <span data-i18n="toggle_sidebar_tooltip">طي / توسيع القائمة الجانبية</span>
+        </button>
+    </div>
+
+    <!-- القسم 1: الموظفين وإدارة الحسابات (Firebase Authentication) -->
+    <div id="tabUsers" class="admin-section active">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div>
+                <h4 class="fw-bold mb-1"><i class="bi bi-people-fill text-danger me-2"></i>إدارة حسابات الموظفين والصلاحيات</h4>
+                <p class="text-muted small mb-0">إدارة المستخدمين والمصادقة المباشرة عبر Google Firebase Authentication</p>
+            </div>
+            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-3 py-2 rounded-pill fw-bold">
+                <i class="bi bi-fire text-warning me-1"></i> Google Firebase Authentication نشط
+            </span>
+        </div>
+
+        <!-- بطاقات إحصائيات سريعة للحسابات -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-3 col-6">
+                <div class="card-custom mb-0 py-3 d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                        <i class="bi bi-people-fill fs-5"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">إجمالي الحسابات</div>
+                        <h5 class="fw-bold mb-0 text-dark" id="statTotalUsers">0</h5>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="card-custom mb-0 py-3 d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-dark bg-opacity-10 text-dark p-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                        <i class="bi bi-shield-fill-check fs-5"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">المشرفين (Admins)</div>
+                        <h5 class="fw-bold mb-0 text-dark" id="statAdmins">0</h5>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="card-custom mb-0 py-3 d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-success bg-opacity-10 text-success p-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                        <i class="bi bi-person-workspace fs-5"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">المختصين (Agents)</div>
+                        <h5 class="fw-bold mb-0 text-dark" id="statAgents">0</h5>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="card-custom mb-0 py-3 d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-secondary bg-opacity-10 text-secondary p-3 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+                        <i class="bi bi-person fs-5"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">الموظفين (Employees)</div>
+                        <h5 class="fw-bold mb-0 text-dark" id="statEmployees">0</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-custom">
+            <h6 class="fw-bold text-primary mb-3"><i class="bi bi-person-plus-fill me-2"></i>إضافة موظف جديد</h6>
+            <form id="userForm" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">الاسم الكامل <span class="text-danger">*</span></label>
+                    <input type="text" id="fullName" class="form-control" required placeholder="مثال: أحمد محمد">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">البريد الإلكتروني (لتسجيل الدخول) <span class="text-danger">*</span></label>
+                    <input type="email" id="userEmail" class="form-control" required placeholder="employee@company.com" dir="ltr">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">اسم المستخدم (اختياري)</label>
+                    <input type="text" id="username" class="form-control" placeholder="تلقائي من الإيميل" dir="ltr">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">كلمة المرور (Firebase) <span class="text-danger">*</span></label>
+                    <input type="password" id="password" class="form-control" minlength="6" required placeholder="6 خانات على الأقل">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">الدور الوظيفي <span class="text-danger">*</span></label>
+                    <select id="role" class="form-select" onchange="toggleDept()">
+                        <option value="employee">موظف عادي (يرفع تذاكر)</option>
+                        <option value="agent">مختص قسم (معالجة تذاكر القسم)</option>
+                        <option value="admin">مدير نظام (Admin - صلاحيات كاملة)</option>
+                    </select>
+                </div>
+                <div class="col-md-4" id="deptSelectBox" style="display: none;">
+                    <label class="form-label small fw-bold text-danger">القسم التابع له: <span class="text-danger">*</span></label>
+                    <select id="userDept" class="form-select"></select>
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label small fw-bold text-secondary">الصلاحيات الإضافية (Permissions):</label>
+                    <div class="d-flex flex-wrap gap-4 bg-light p-3 rounded-3 border">
+                        <div class="form-check"><input class="form-check-input" type="checkbox" id="permExport" checked><label class="form-check-label small fw-semibold" for="permExport">تصدير تقارير Excel</label></div>
+                        <div class="form-check"><input class="form-check-input" type="checkbox" id="permApprove"><label class="form-check-label small fw-semibold" for="permApprove">اعتماد الحركات المالية (Maker-Checker)</label></div>
+                        <div class="form-check"><input class="form-check-input" type="checkbox" id="permViewAll"><label class="form-check-label small fw-semibold" for="permViewAll">رؤية تذاكر كافة الأقسام</label></div>
+                        <div class="form-check"><input class="form-check-input" type="checkbox" id="permDelete"><label class="form-check-label small fw-semibold" for="permDelete">صلاحية حذف التذاكر</label></div>
+                    </div>
+                </div>
+                <div class="col-12 pt-2">
+                    <button type="submit" class="btn btn-primary fw-bold px-4">
+                        <i class="bi bi-person-plus me-1"></i> إنشاء الحساب وتفعيله في Firebase
+                    </button>
+                </div>
+            </form>
+        </div>
+
+
+        <div class="card-custom">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <h6 class="fw-bold mb-0">سجل حسابات الموظفين الحاليين</h6>
+                <div style="width: 260px;">
+                    <input type="text" id="searchUserFilter" class="form-control form-control-sm" placeholder="بحث بالاسم أو الإيميل أو القسم..." oninput="filterUsersTable(this.value)">
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle small mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>الموظف</th>
+                            <th>البريد الإلكتروني</th>
+                            <th>الدور والقسم</th>
+                            <th>الصلاحيات</th>
+                            <th class="text-center" style="width: 140px;">إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- القسم 2: الأقسام وإعدادات الـ SLA -->
+    <div id="tabDepts" class="admin-section">
+        <h4 class="fw-bold mb-3" data-i18n="admin_depts_heading">🏢 إدارة الأقسام وساعات الاستجابة المعيارية (SLA Settings)</h4>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card-custom">
+                    <h6 class="fw-bold text-primary mb-3"><i class="bi bi-plus-circle me-1"></i><span data-i18n="admin_add_dept">إضافة قسم جديد</span></h6>
+                    <form id="deptForm">
+                        <div class="mb-3"><label class="form-label small fw-bold" data-i18n="admin_dept_name">اسم القسم</label><input type="text" id="deptName" class="form-control" required></div>
+                        <div class="mb-3"><label class="form-label small fw-bold" data-i18n="admin_dept_sla">ساعات الـ SLA المعيارية</label><input type="number" step="0.25" min="0.25" id="deptSla" class="form-control" value="4" required></div>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold" data-i18n="admin_btn_add_dept">إضافة القسم</button>
+                    </form>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card-custom">
+                    <h6 class="fw-bold mb-3" data-i18n="admin_depts_list">الأقسام الحالية وساعات الاستجابة</h6>
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light"><tr><th data-i18n="th_dept_id">رقم</th><th data-i18n="th_dept_name">اسم القسم</th><th data-i18n="th_dept_sla">ساعات الـ SLA</th><th data-i18n="th_admin_actions">إجراءات</th></tr></thead>
+                        <tbody id="deptsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- إعدادات محرك الـ SLA الشاملة -->
+        <div class="card-custom border-primary">
+            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+                <h6 class="fw-bold text-primary mb-0"><i class="bi bi-stopwatch-fill me-2"></i><span data-i18n="admin_sla_engine_heading">إعدادات محرك الـ SLA والأولويات وسياسات التوقف والتصعيد</span></h6>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="recalculateActiveSla(false)">
+                        <i class="bi bi-calculator me-1"></i> <span data-i18n="admin_recalc_original">إعادة احتساب الـ SLA (من وقت الإنشاء)</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-bold" onclick="recalculateActiveSla(true)">
+                        <i class="bi bi-arrow-clockwise me-1"></i> <span data-i18n="admin_recalc_now">تصفير وتجديد عداد الـ SLA للتذاكر النشطة (من الآن)</span>
+                    </button>
+                </div>
+            </div>
+
+            <form id="slaSettingsForm" class="row g-3">
+                <div class="col-md-12">
+                    <label class="form-label small fw-bold" data-i18n="admin_sla_mode_label">آلية احتساب وقت الـ SLA عند فتح التيكت:</label>
+                    <select id="slaModeSelect" class="form-select fw-bold">
+                        <option value="dept_default" data-i18n="admin_sla_mode_hybrid">⚡ هجين ذكي (الافتراضي): يعتمد ساعات القسم للأولوية المتوسطة، ويطبق ساعات الأولوية عند اختيار (عاجل جداً / عالية / منخفضة)</option>
+                        <option value="department_only" data-i18n="admin_sla_mode_dept">🏢 حسب القسم فقط: يلتزم دائماً بساعات الـ SLA المحددة للقسم المستلم بغض النظر عن أولوية التيكت</option>
+                        <option value="priority_only" data-i18n="admin_sla_mode_prio">🔥 حسب الأولوية فقط: يعتمد ساعات الأولوية المختارة أدناه لجميع الأقسام</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-danger" data-i18n="admin_sla_urgent_label">🔥 أولوية عاجل جداً (ساعات)</label>
+                    <input type="number" step="0.25" min="0.25" id="slaUrgentInput" class="form-control fw-bold border-danger" value="1" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-warning text-dark" data-i18n="admin_sla_high_label">⚡ أولوية عالية (ساعات)</label>
+                    <input type="number" step="0.25" min="0.25" id="slaHighInput" class="form-control fw-bold" value="2" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-primary" data-i18n="admin_sla_medium_label">📌 أولوية متوسطة (ساعات)</label>
+                    <input type="number" step="0.25" min="0.25" id="slaMediumInput" class="form-control fw-bold" value="4" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-secondary" data-i18n="admin_sla_low_label">⏳ أولوية منخفضة (ساعات)</label>
+                    <input type="number" step="0.5" min="0.5" id="slaLowInput" class="form-control fw-bold" value="24" required>
+                </div>
+
+                <div class="col-md-12">
+                    <div class="bg-light p-3 rounded border">
+                        <div class="fw-bold small text-dark mb-2" data-i18n="admin_sla_policies_heading">سياسات التوقف المؤقت والتحويل والتصعيد التلقائي:</div>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="slaPausePendingCheck" checked>
+                                    <label class="form-check-label small fw-bold" data-i18n="admin_sla_pause_pending">⏸️ إيقاف الـ SLA مؤقتاً عند حالة (بانتظار العميل) وتعويض الوقت عند الاستئناف</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="slaPauseApprovalCheck" checked>
+                                    <label class="form-check-label small fw-bold" data-i18n="admin_sla_pause_approval">🛡️ إيقاف الـ SLA مؤقتاً أثناء انتظار اعتماد المشرف (Maker-Checker) وبدء العداد فور التعميد</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="slaResetTransferCheck" checked>
+                                    <label class="form-check-label small fw-bold" data-i18n="admin_sla_reset_transfer">🔄 منح مهلة SLA جديدة حسب ساعات القسم المستلم عند تحويل التيكت بين الأقسام</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="slaAutoEscalateCheck" checked>
+                                    <label class="form-check-label small fw-bold" data-i18n="admin_sla_auto_escalate">🚨 تفعيل التصعيد التلقائي (Auto-Escalation) للتذاكر المتأخرة وإشعار الإدارة</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary fw-bold px-5"><i class="bi bi-check2-circle me-1"></i> <span data-i18n="admin_btn_save_sla">حفظ وتعميم إعدادات الـ SLA</span></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- القسم 3: المشاكل الثابتة -->
+    <div id="tabIssues" class="admin-section">
+        <h4 class="fw-bold mb-3" data-i18n="admin_issues_heading">📋 إدارة المشاكل والعناوين الثابتة للتذاكر</h4>
+        <div class="card-custom">
+            <h6 class="fw-bold text-primary mb-3" data-i18n="admin_add_issue">إضافة مشكلة ثابتة جديدة للقائمة</h6>
+            <form id="issueForm" class="row g-3">
+                <div class="col-md-4"><label class="form-label small fw-bold" data-i18n="admin_issue_cat">التصنيف الرئيسي</label><select id="issueCatSelect" class="form-select" required></select></div>
+                <div class="col-md-5"><label class="form-label small fw-bold" data-i18n="admin_issue_title">عنوان المشكلة الثابت</label><input type="text" id="issueTitleInput" class="form-control" required></div>
+                <div class="col-md-3"><label class="form-label small fw-bold" data-i18n="admin_issue_trans">نوع الحركة التلقائي</label><select id="issueTransSelect" class="form-select" required></select></div>
+                <div class="col-12"><button type="submit" class="btn btn-primary fw-bold px-4" data-i18n="admin_btn_add_issue">إضافة المشكلة للقائمة الثابتة</button></div>
+            </form>
+        </div>
+        <div class="card-custom">
+            <h6 class="fw-bold mb-3"><span data-i18n="admin_issues_current">قائمة المشاكل الثابتة الحالية</span> (<span id="issuesCount">0</span>)</h6>
+            <table class="table table-hover align-middle small">
+                <thead class="table-light"><tr><th data-i18n="admin_issue_cat">التصنيف</th><th data-i18n="admin_issue_title">عنوان المشكلة</th><th data-i18n="admin_issue_trans">نوع الحركة</th><th data-i18n="th_admin_actions">إجراءات</th></tr></thead>
+                <tbody id="issuesBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- القسم 4: الردود التلقائية -->
+    <div id="tabCanned" class="admin-section">
+        <h4 class="fw-bold mb-3" data-i18n="admin_canned_heading">⚡ إدارة الردود التلقائية السريعة (Canned Responses)</h4>
+        <div class="card-custom">
+            <h6 class="fw-bold text-primary mb-3" data-i18n="admin_add_canned">إضافة زر رد تلقائي جديد</h6>
+            <form id="cannedForm" class="row g-3">
+                <div class="col-md-4"><label class="form-label small fw-bold" data-i18n="admin_canned_label">اسم الزر المختصر</label><input type="text" id="cannedLabel" class="form-control" required></div>
+                <div class="col-md-8"><label class="form-label small fw-bold" data-i18n="admin_canned_content">نص الرد الكامل</label><input type="text" id="cannedContent" class="form-control" required></div>
+                <div class="col-12"><button type="submit" class="btn btn-primary fw-bold px-4" data-i18n="admin_btn_add_canned">حفظ الرد التلقائي</button></div>
+            </form>
+        </div>
+        <div class="card-custom">
+            <table class="table table-hover align-middle">
+                <thead class="table-light"><tr><th data-i18n="admin_canned_label">اسم الزر</th><th data-i18n="admin_canned_content">نص الرد التلقائي الكامل</th><th data-i18n="th_admin_actions">إجراءات</th></tr></thead>
+                <tbody id="cannedBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- القسم 5: القوائم الديناميكية -->
+    <div id="tabLists" class="admin-section">
+        <h4 class="fw-bold mb-3" data-i18n="admin_lists_heading">💳 إدارة بوابات الدفع (PSPs)، أنواع الحركات، العملات، والتصنيفات</h4>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="card-custom">
+                    <h6 class="fw-bold text-primary mb-2" data-i18n="admin_lists_psp">بوابات الدفع (PSPs)</h6>
+                    <div class="input-group input-group-sm mb-3">
+                        <input type="text" id="newPspInput" class="form-control" placeholder="اسم بوابة دفع جديدة..." data-i18n-placeholder="admin_placeholder_psp">
+                        <button class="btn btn-primary fw-bold" onclick="addListItem('psp', 'newPspInput')">+ <span data-i18n="btn_add">إضافة</span></button>
+                    </div>
+                    <table class="table table-sm align-middle"><tbody id="listPspBody"></tbody></table>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card-custom">
+                    <h6 class="fw-bold text-success mb-2" data-i18n="admin_lists_trans">أنواع الحركات المالية</h6>
+                    <div class="input-group input-group-sm mb-3">
+                        <input type="text" id="newTransInput" class="form-control" placeholder="نوع حركة جديد..." data-i18n-placeholder="admin_placeholder_trans">
+                        <button class="btn btn-success fw-bold" onclick="addListItem('transaction_type', 'newTransInput')">+ <span data-i18n="btn_add">إضافة</span></button>
+                    </div>
+                    <table class="table table-sm align-middle"><tbody id="listTransBody"></tbody></table>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card-custom">
+                    <h6 class="fw-bold text-warning text-dark mb-2" data-i18n="admin_lists_curr">العملات المعتمدة</h6>
+                    <div class="input-group input-group-sm mb-3">
+                        <input type="text" id="newCurrInput" class="form-control" placeholder="رمز العملة..." data-i18n-placeholder="admin_placeholder_curr">
+                        <button class="btn btn-warning fw-bold" onclick="addListItem('currency', 'newCurrInput')">+ <span data-i18n="btn_add">إضافة</span></button>
+                    </div>
+                    <table class="table table-sm align-middle"><tbody id="listCurrBody"></tbody></table>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card-custom">
+                    <h6 class="fw-bold text-info text-dark mb-2" data-i18n="admin_lists_cat">تصنيفات المشاكل الرئيسية</h6>
+                    <div class="input-group input-group-sm mb-3">
+                        <input type="text" id="newCatInput" class="form-control" placeholder="تصنيف رئيسي جديد..." data-i18n-placeholder="admin_placeholder_cat">
+                        <button class="btn btn-info fw-bold text-white" onclick="addListItem('issue_category', 'newCatInput')">+ <span data-i18n="btn_add">إضافة</span></button>
+                    </div>
+                    <table class="table table-sm align-middle"><tbody id="listCatBody"></tbody></table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- القسم 6: شريط التنبيه العام والنسخ الاحتياطي لقاعدة البيانات -->
+    <div id="tabBannerBackup" class="admin-section">
+        <h4 class="fw-bold mb-3" data-i18n="admin_banner_backup_heading">🚨 شريط التنبيه العام للأعطال + النسخ الاحتياطي لقاعدة البيانات</h4>
+        <div class="row">
+            <div class="col-md-7">
+                <div class="card-custom border-warning">
+                    <h6 class="fw-bold text-danger mb-3"><i class="bi bi-broadcast-pin me-2"></i><span data-i18n="admin_banner_card_title">نشر شريط تنبيه عام لجميع موظفي الشركة (Outage Banner)</span></h6>
+                    <p class="small text-muted" data-i18n="admin_banner_card_desc">يظهر هذا الشريط فوراً في أعلى لوحة العمليات لدى كافة الموظفين لتنبيههم في حال وجود تأخير أو عطل عام في بوابة دفع.</p>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold" data-i18n="admin_banner_text_label">نص التعميم / التنبيه العام</label>
+                        <input type="text" id="bannerTextInput" class="form-control" placeholder="مثال: ⚠️ تنبيه: يوجد تأخير عام حالياً في بوابة دفع Visa، جاري المتابعة مع المزود..." data-i18n-placeholder="admin_banner_text_placeholder">
+                    </div>
+                    <div class="row g-3 mb-3 align-items-center">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold" data-i18n="admin_banner_type_label">لون الشريط</label>
+                            <select id="bannerTypeSelect" class="form-select">
+                                <option value="warning" data-i18n="admin_banner_opt_warning">🟡 تحذيري (أصفر)</option>
+                                <option value="danger" data-i18n="admin_banner_opt_danger">🔴 طوارئ / عطل (أحمر)</option>
+                                <option value="info" data-i18n="admin_banner_opt_info">🔵 معلومات عامة (أزرق)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 pt-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="bannerActiveCheck">
+                                <label class="form-check-label fw-bold" data-i18n="admin_banner_active_label">تفعيل وإظهار الشريط للجميع الآن</label>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-dark fw-bold w-100" onclick="saveBannerSettings()" data-i18n="admin_btn_save_banner">حفظ وبث الشريط فوراً</button>
+                </div>
+            </div>
+
+            <div class="col-md-5">
+                <div class="card-custom border-primary mb-3">
+                    <h6 class="fw-bold text-primary mb-3"><i class="bi bi-database-fill-down me-2"></i><span data-i18n="admin_backup_card_title">النسخ الاحتياطي وحماية البيانات (Database Backup)</span></h6>
+                    <p class="small text-muted" data-i18n="admin_backup_card_desc">يقوم الخادم تلقائياً بأخذ نسخة احتياطية يومية في مجلد <code>backups/</code>، ويمكنك أيضاً تحميل نسخة كاملة على جهازك في أي لحظة.</p>
+                    <button class="btn btn-primary fw-bold w-100 py-3" onclick="downloadBackup()">
+                        <i class="bi bi-cloud-arrow-down-fill fs-5 me-2 align-middle"></i> <span data-i18n="admin_btn_download_backup">تحميل نسخة احتياطية كاملة (.db)</span>
+                    </button>
+                </div>
+
+                <div class="card-custom border-danger">
+                    <h6 class="fw-bold text-danger mb-2"><i class="bi bi-recycle me-2"></i><span>تهيئة النظام للتشغيل الفعلي (Factory Reset)</span></h6>
+                    <p class="small text-muted mb-3">مسح كافة التذاكر التجريبية، الإشعارات، المرفقات، وتصفير عداد التذاكر ليبدأ من <code>#1</code> مع الحفاظ على الأقسام وإعدادات الـ SLA.</p>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="resetRemoveUsersCheck">
+                        <label class="form-check-label small fw-bold text-secondary" for="resetRemoveUsersCheck">حذف حسابات الموظفين التجريبية أيضاً (الإبقاء على المدير فقط)</label>
+                    </div>
+                    <button class="btn btn-outline-danger fw-bold w-100 py-2" onclick="triggerFactoryReset()">
+                        <i class="bi bi-trash3-fill me-1"></i> تصفير البيانات التجريبية وبدء العمل الفعلي
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- القسم 7: سجل الرقابة والأمان -->
+    <div id="tabLogs" class="admin-section">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h4 class="fw-bold m-0" data-i18n="admin_logs_heading">🛡️ سجل الرقابة الأمني وتوثيق عناوين الشبكة (Security & IP Audit Logs)</h4>
+            <div style="min-width: 280px;">
+                <input type="text" id="searchLogsInput" class="form-control form-control-sm border-primary" placeholder="🔍 بحث في السجل (مستخدم، إجراء، تفاصيل، IP)..." data-i18n-placeholder="search_logs_placeholder" oninput="renderLogs()">
+            </div>
+        </div>
+        <div class="card-custom">
+            <div class="table-responsive" style="max-height: 550px;">
+                <table class="table table-sm table-striped align-middle small">
+                    <thead class="table-dark">
+                        <tr><th data-i18n="th_log_datetime">التاريخ والوقت</th><th data-i18n="th_log_user">المستخدم</th><th data-i18n="th_log_action">نوع الإجراء</th><th data-i18n="th_log_details">التفاصيل</th><th data-i18n="th_log_ip">عنوان الـ IP المحلي</th></tr>
+                    </thead>
+                    <tbody id="logsBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- القسم 8: محرك القواعد والتقارير -->
+    <div id="tabRulesReport" class="admin-section">
+        <h4 class="fw-bold mb-3" data-i18n="admin_rules_heading">⚙️ محرك قواعد الأعمال (Rules Engine) والتدقيق المالي</h4>
+        
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="card-custom border-primary">
+                    <h6 class="fw-bold text-primary mb-3"><i class="bi bi-shield-check me-2"></i><span data-i18n="admin_rules_card_title">قواعد الاعتماد المزدوج (Maker-Checker)</span></h6>
+                    <p class="small text-muted mb-3" data-i18n="admin_rules_card_desc">أي تيكت يتجاوز هذا المبلغ، أو يحتوي عنوانه على إحدى الكلمات المفتاحية، سيتم تجميده وطلب اعتماد المشرف فوراً.</p>
+                    
+                    <form id="rulesForm">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small" data-i18n="admin_rule_amount_label">حد مبلغ الاعتماد المالي (Limit)</label>
+                            <div class="input-group">
+                                <input type="number" id="ruleAmount" class="form-control fw-bold text-danger" required>
+                                <span class="input-group-text">$</span>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small" data-i18n="admin_rule_keywords_label">الكلمات المفتاحية الحساسة (افصل بينها بفاصلة)</label>
+                            <textarea id="ruleKeywords" class="form-control" rows="2" placeholder="مثال: تصفير رصيد, دفع يدوي, تسوية" data-i18n-placeholder="admin_rule_keywords_placeholder"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary fw-bold w-100" data-i18n="admin_btn_save_rules">تحديث وتطبيق القواعد فوراً</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card-custom border-success">
+                    <h6 class="fw-bold text-success mb-3"><i class="bi bi-file-earmark-spreadsheet me-2"></i><span data-i18n="admin_audit_card_title">تصدير تقارير التدقيق (Audit Trails)</span></h6>
+                    <p class="small text-muted mb-3" data-i18n="admin_audit_card_desc">تصدير سجل كامل لجميع عمليات "الموافقة" و "الرفض" التي تمت عبر نظام Maker-Checker لمطابقتها مع قسم التدقيق أو الامتثال.</p>
+                    
+                    <button class="btn btn-success fw-bold w-100 py-3 mb-2" onclick="exportAuditReport()">
+                        <i class="bi bi-file-excel fs-5 me-2 align-middle"></i> <span data-i18n="admin_btn_export_audit">تحميل تقرير التدقيق (Excel/CSV)</span>
+                    </button>
+                    <div class="small text-muted text-center" data-i18n="admin_audit_notice">يحتوي التقرير على (الموظف المعتمد، IP الجهاز، التوقيت الدقيق، والتفاصيل).</div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card-custom border-danger">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold text-danger m-0"><i class="bi bi-trash3-fill me-2"></i><span data-i18n="admin_deleted_card_title">سلة محذوفات التذاكر (Soft-Deleted Tickets Recovery)</span></h6>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="loadDeletedTickets()"><i class="bi bi-arrow-clockwise"></i></button>
+                    </div>
+                    <p class="small text-muted mb-3" data-i18n="admin_deleted_card_desc">التذاكر التي تم حذفها منطقياً مع إمكانية استعادتها كاملة ببياناتها وسجلها الزمني.</p>
+                    <div class="table-responsive" style="max-height: 320px;">
+                        <table class="table table-sm table-hover align-middle small m-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th data-i18n="th_ticket_no">رقم التيكت</th>
+                                    <th data-i18n="th_subject_issue">الموضوع</th>
+                                    <th data-i18n="th_client_email">العميل</th>
+                                    <th data-i18n="th_amount_method">المبلغ</th>
+                                    <th data-i18n="th_target_dept">القسم</th>
+                                    <th data-i18n="th_deleted_by">حُذفت بواسطة</th>
+                                    <th data-i18n="th_deleted_at">تاريخ الحذف</th>
+                                    <th data-i18n="th_action">إجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody id="deletedTicketsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- نافذة تعديل موظف -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h6 class="modal-title fw-bold" data-i18n="admin_modal_edit_user">تعديل بيانات وصلاحيات الموظف</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editUserId">
+                <div class="mb-2"><label class="small fw-bold" data-i18n="admin_fullname">الاسم الكامل</label><input type="text" id="editFullName" class="form-control"></div>
+                <div class="mb-2"><label class="small fw-bold text-primary" data-i18n="admin_user_email">البريد الإلكتروني الوظيفي (لتسجيل الدخول)</label><input type="email" id="editEmail" class="form-control border-primary" dir="ltr" placeholder="employee@company.com"></div>
+                <div class="mb-2">
+                    <label class="small fw-bold" data-i18n="admin_role">الدور</label>
+                    <select id="editRole" class="form-select">
+                        <option value="employee" data-i18n="admin_role_employee">موظف عادي</option>
+                        <option value="agent" data-i18n="admin_role_agent">مختص قسم</option>
+                        <option value="admin" data-i18n="admin_role_admin">مدير نظام</option>
+                    </select>
+                </div>
+                <div class="mb-2"><label class="small fw-bold" data-i18n="lbl_dept">القسم</label><select id="editDept" class="form-select"></select></div>
+                <div class="mb-3"><label class="small fw-bold text-danger" data-i18n="admin_modal_new_pass_hint">كلمة مرور جديدة (اتركه فارغاً لعدم التغيير)</label><input type="password" id="editPassword" class="form-control"></div>
+                <div class="bg-light p-2 rounded border">
+                    <div class="form-check"><input class="form-check-input" type="checkbox" id="editPermExport"><label class="small fw-bold" data-i18n="admin_perm_export">تصدير Excel</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" id="editPermApprove"><label class="small fw-bold" data-i18n="admin_perm_approve">اعتماد Maker-Checker</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" id="editPermViewAll"><label class="small fw-bold" data-i18n="admin_perm_view_all">رؤية كافة الأقسام</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" id="editPermDelete"><label class="small fw-bold" data-i18n="admin_perm_delete">حذف التذاكر</label></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary fw-bold w-100" onclick="saveUserEdits()" data-i18n="admin_modal_btn_save_user">حفظ التعديلات</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (!token || !user || user.role !== 'admin') window.location.href = 'dashboard.html';
+
+    if (localStorage.getItem('darkMode') === '1') {
+        document.body.classList.add('dark-mode');
+        const dk = document.getElementById('adminDarkBtn');
+        if (dk) dk.innerHTML = '<i class="bi bi-sun-fill text-warning" style="font-size: 11px;"></i>';
+    }
+
+    function toggleAdminDarkMode() {
+        document.body.classList.toggle('dark-mode');
+        const isDark = document.body.classList.contains('dark-mode');
+        localStorage.setItem('darkMode', isDark ? '1' : '0');
+        const dk = document.getElementById('adminDarkBtn');
+        if (dk) dk.innerHTML = isDark
+            ? '<i class="bi bi-sun-fill text-warning" style="font-size: 11px;"></i>'
+            : '<i class="bi bi-moon-stars-fill" style="font-size: 11px;"></i>';
+    }
+
+    function toggleAdminSidebar() {
+        if (window.innerWidth <= 992) {
+            document.body.classList.toggle('sidebar-mobile-open');
+        } else {
+            document.body.classList.toggle('sidebar-collapsed');
+        }
+    }
+
+    const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+    let allUsers = [];
+    let allSecurityLogs = [];
+    let sysConfig = { departments: [], issues: [], canned_responses: [], lists: [], banner: {} };
+
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function showTab(tabId, linkEl) {
+        document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.sidebar .nav-link').forEach(l => l.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        linkEl.classList.add('active');
+    }
+
+    function toggleDept() {
+        document.getElementById('deptSelectBox').style.display = document.getElementById('role').value === 'agent' ? 'block' : 'none';
+    }
+
+    async function loadSystemConfig() {
+        const res = await fetch('/api/system-config', { headers });
+        sysConfig = await res.json();
+
+        if (sysConfig.banner) {
+            document.getElementById('bannerTextInput').value = sysConfig.banner.text || '';
+            document.getElementById('bannerTypeSelect').value = sysConfig.banner.type || 'warning';
+            document.getElementById('bannerActiveCheck').checked = sysConfig.banner.active === '1';
+        }
+
+        if (sysConfig.sla_settings) {
+            populateSlaSettingsForm(sysConfig.sla_settings);
+        }
+
+        renderDepartments();
+        renderLists();
+        renderIssues();
+        renderCanned();
+    }
+
+    function parseUtcDate(dateStr) {
+        if (!dateStr) return new Date();
+        const s = String(dateStr).trim();
+        if (s.includes('T') || s.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s)) return new Date(s);
+        return new Date(s.replace(' ', 'T') + 'Z');
+    }
+
+    function populateSlaSettingsForm(s) {
+        if (!s) return;
+        document.getElementById('slaModeSelect').value = s.sla_mode || 'dept_default';
+        document.getElementById('slaUrgentInput').value = s.sla_urgent_hours ?? 1;
+        document.getElementById('slaHighInput').value = s.sla_high_hours ?? 2;
+        document.getElementById('slaMediumInput').value = s.sla_medium_hours ?? 4;
+        document.getElementById('slaLowInput').value = s.sla_low_hours ?? 24;
+        document.getElementById('slaPausePendingCheck').checked = s.sla_pause_on_pending !== false;
+        document.getElementById('slaPauseApprovalCheck').checked = s.sla_pause_on_approval !== false;
+        document.getElementById('slaResetTransferCheck').checked = s.sla_reset_on_transfer !== false;
+        document.getElementById('slaAutoEscalateCheck').checked = s.sla_auto_escalate !== false;
+    }
+
+    async function saveBannerSettings() {
+        const payload = {
+            active: document.getElementById('bannerActiveCheck').checked,
+            text: document.getElementById('bannerTextInput').value.trim(),
+            type: document.getElementById('bannerTypeSelect').value
+        };
+        await fetch('/api/admin/banner', { method: 'POST', headers, body: JSON.stringify(payload) });
+        Swal.fire({ icon: 'success', title: i18n.t('banner_saved_alert'), timer: 1400, showConfirmButton: false });
+        loadLogs();
+    }
+
+    async function downloadBackup() {
+        const res = await fetch('/api/admin/backup-download', { headers: { 'Authorization': `Bearer ${token}` } });
+        const blob = await res.blob();
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `Enterprise_DB_Backup_${new Date().toISOString().slice(0,10)}.db`;
+        link.click();
+        loadLogs();
+    }
+
+    async function triggerFactoryReset() {
+        const removeUsers = document.getElementById('resetRemoveUsersCheck')?.checked || false;
+        const confirmRes = await Swal.fire({
+            icon: 'warning',
+            title: 'تأكيد تهيئة النظام للتشغيل الفعلي',
+            html: `سيتم مسح جميع التذاكر التجريبية، السجلات الزمنية، الإشعارات، والمرفقات بشكل نهائي، وتصفير عداد التذاكر ليبدأ من <b>#1</b>.${removeUsers ? '<br><br><span class="text-danger fw-bold">⚠️ سيتم أيضاً حذف حسابات الموظفين التجريبية والإبقاء على حساب المدير العام فقط.</span>' : ''}`,
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'نعم، تصفير البيانات الآن',
+            cancelButtonText: 'إلغاء'
+        });
+        if (!confirmRes.isConfirmed) return;
+
+        const res = await fetch('/api/admin/factory-reset', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ remove_non_admin_users: removeUsers })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            Swal.fire({ icon: 'success', title: 'تم تصفير النظام بنجاح', text: data.message, timer: 2200, showConfirmButton: false });
+            loadUsers();
+            loadLogs();
+            loadDeletedTickets();
+        } else {
+            Swal.fire({ icon: 'error', title: 'خطأ', text: data.error || 'تعذر تصفير البيانات' });
+        }
+    }
+
+    function renderDepartments() {
+        const tbody = document.getElementById('deptsBody');
+        const s1 = document.getElementById('userDept');
+        const s2 = document.getElementById('editDept');
+        tbody.innerHTML = '';
+        const isEn = i18n.getLanguage() === 'en';
+        s1.innerHTML = `<option value="">${isEn ? '-- Select Department --' : '-- اختر القسم --'}</option>`;
+        s2.innerHTML = `<option value="">${isEn ? '-- No Department --' : '-- بدون قسم --'}</option>`;
+
+        sysConfig.departments.forEach(d => {
+            const hrsUnit = isEn ? 'hrs' : 'ساعات';
+            const editTxt = isEn ? 'Edit' : 'تعديل';
+            const delTxt = isEn ? 'Delete' : 'حذف';
+            const safeName = escapeHtml(d.name);
+            tbody.innerHTML += `
+                <tr>
+                    <td>#${d.id}</td>
+                    <td class="fw-bold">${safeName}</td>
+                    <td><span class="badge bg-info text-dark">${escapeHtml(d.sla_hours)} ${hrsUnit}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="editDept(${d.id})"><i class="bi bi-pencil"></i> ${editTxt}</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteDept(${d.id})"><i class="bi bi-trash"></i> ${delTxt}</button>
+                    </td>
+                </tr>`;
+            s1.innerHTML += `<option value="${d.id}">${safeName}</option>`;
+            s2.innerHTML += `<option value="${d.id}">${safeName}</option>`;
+        });
+    }
+
+    async function editDept(id) {
+        const dept = sysConfig.departments.find(x => x.id === id);
+        if (!dept) return;
+        const { value: formValues } = await Swal.fire({
+            title: i18n.t('edit_dept_sla_title'),
+            html: `<div class="text-start mb-2"><label class="small fw-bold">${i18n.t('dept_name_label')}</label><input id="swal-dept-name" class="swal2-input m-0 w-100" value="${escapeHtml(dept.name)}"></div>
+                   <div class="text-start mb-2"><label class="small fw-bold">${i18n.t('sla_hours_label')}</label><input id="swal-dept-sla" type="number" step="0.25" min="0.25" class="swal2-input m-0 w-100" value="${escapeHtml(dept.sla_hours)}"></div>
+                   <div class="form-check text-start mt-2"><input class="form-check-input" type="checkbox" id="swal-dept-recalc" checked><label class="form-check-label small fw-bold">${i18n.t('recalc_open_tickets')}</label></div>`,
+            showCancelButton: true,
+            confirmButtonText: i18n.t('save_changes'),
+            cancelButtonText: i18n.t('cancel'),
+            preConfirm: () => ({
+                name: document.getElementById('swal-dept-name').value.trim(),
+                sla_hours: parseFloat(document.getElementById('swal-dept-sla').value) || 4,
+                recalculate_open: document.getElementById('swal-dept-recalc').checked
+            })
+        });
+        if (formValues && formValues.name) {
+            const res = await fetch(`/api/admin/departments/${id}`, { method: 'PUT', headers, body: JSON.stringify(formValues) });
+            if (res.ok) {
+                Swal.fire({ icon: 'success', title: i18n.t('success'), timer: 1300, showConfirmButton: false });
+                loadSystemConfig();
+                loadLogs();
+            }
+        }
+    }
+
+    function renderIssues() {
+        const tbody = document.getElementById('issuesBody');
+        document.getElementById('issuesCount').innerText = sysConfig.issues.length;
+        tbody.innerHTML = '';
+
+        const isEn = i18n.getLanguage() === 'en';
+        const editTxt = isEn ? 'Edit' : 'تعديل';
+        sysConfig.issues.forEach(iss => {
+            tbody.innerHTML += `
+                <tr>
+                    <td><span class="badge bg-light text-dark border">${escapeHtml(iss.category)}</span></td>
+                    <td class="fw-bold">${escapeHtml(iss.title)}</td>
+                    <td><span class="badge bg-primary bg-opacity-10 text-primary">${escapeHtml(iss.default_transaction_type)}</span></td>
+                    <td style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="editIssue(${iss.id})"><i class="bi bi-pencil"></i> ${editTxt}</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteIssue(${iss.id})"><i class="bi bi-trash"></i></button>
+                    </td>
+                </tr>`;
+        });
+    }
+
+    async function editIssue(id) {
+        const iss = sysConfig.issues.find(x => x.id === id);
+        if (!iss) return;
+        const { value: formValues } = await Swal.fire({
+            title: i18n.t('edit_issue_title'),
+            html: `<input id="swal-iss-cat" class="swal2-input" value="${escapeHtml(iss.category)}">
+                   <input id="swal-iss-title" class="swal2-input" value="${escapeHtml(iss.title)}">
+                   <input id="swal-iss-trans" class="swal2-input" value="${escapeHtml(iss.default_transaction_type)}">`,
+            showCancelButton: true,
+            confirmButtonText: i18n.t('save'),
+            preConfirm: () => ({
+                category: document.getElementById('swal-iss-cat').value.trim(),
+                title: document.getElementById('swal-iss-title').value.trim(),
+                default_transaction_type: document.getElementById('swal-iss-trans').value.trim()
+            })
+        });
+        if (formValues && formValues.title) {
+            await fetch(`/api/admin/issues/${id}`, { method: 'PUT', headers, body: JSON.stringify(formValues) });
+            loadSystemConfig(); loadLogs();
+        }
+    }
+
+    async function deleteIssue(id) {
+        if (!confirm(i18n.t('confirm_delete_issue'))) return;
+        await fetch(`/api/admin/issues/${id}`, { method: 'DELETE', headers });
+        loadSystemConfig(); loadLogs();
+    }
+
+    function renderCanned() {
+        const tbody = document.getElementById('cannedBody');
+        tbody.innerHTML = '';
+        const isEn = i18n.getLanguage() === 'en';
+        const editTxt = isEn ? 'Edit' : 'تعديل';
+        sysConfig.canned_responses.forEach(c => {
+            tbody.innerHTML += `
+                <tr>
+                    <td class="fw-bold text-primary">${escapeHtml(c.label)}</td>
+                    <td>${escapeHtml(c.content)}</td>
+                    <td style="white-space: nowrap;">
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="editCanned(${c.id})"><i class="bi bi-pencil"></i> ${editTxt}</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteCanned(${c.id})"><i class="bi bi-trash"></i></button>
+                    </td>
+                </tr>`;
+        });
+    }
+
+    async function editCanned(id) {
+        const c = sysConfig.canned_responses.find(x => x.id === id);
+        if (!c) return;
+        const { value: formValues } = await Swal.fire({
+            title: i18n.t('edit_canned_title'),
+            html: `<input id="swal-can-label" class="swal2-input" value="${escapeHtml(c.label)}">
+                   <textarea id="swal-can-content" class="swal2-textarea">${escapeHtml(c.content)}</textarea>`,
+            showCancelButton: true,
+            confirmButtonText: i18n.t('save'),
+            preConfirm: () => ({
+                label: document.getElementById('swal-can-label').value.trim(),
+                content: document.getElementById('swal-can-content').value.trim()
+            })
+        });
+        if (formValues && formValues.label) {
+            await fetch(`/api/admin/canned-responses/${id}`, { method: 'PUT', headers, body: JSON.stringify(formValues) });
+            loadSystemConfig(); loadLogs();
+        }
+    }
+
+    async function deleteCanned(id) {
+        if (!confirm(i18n.t('confirm_delete_canned'))) return;
+        await fetch(`/api/admin/canned-responses/${id}`, { method: 'DELETE', headers });
+        loadSystemConfig(); loadLogs();
+    }
+
+    function renderLists() {
+        const pspBody = document.getElementById('listPspBody');
+        const transBody = document.getElementById('listTransBody');
+        const currBody = document.getElementById('listCurrBody');
+        const catBody = document.getElementById('listCatBody');
+        const issueCatSelect = document.getElementById('issueCatSelect');
+        const issueTransSelect = document.getElementById('issueTransSelect');
+
+        pspBody.innerHTML = ''; transBody.innerHTML = ''; currBody.innerHTML = ''; catBody.innerHTML = '';
+        issueCatSelect.innerHTML = ''; issueTransSelect.innerHTML = '';
+
+        const rowHtml = (item) => `
+            <tr>
+                <td class="fw-bold">${escapeHtml(item.value)}</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-link text-primary p-0 me-2" onclick="editListItem(${item.id})"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-link text-danger p-0" onclick="deleteListItem(${item.id})"><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>`;
+
+        sysConfig.lists.forEach(item => {
+            const safeVal = escapeHtml(item.value);
+            if (item.list_type === 'psp') pspBody.innerHTML += rowHtml(item);
+            if (item.list_type === 'transaction_type') {
+                transBody.innerHTML += rowHtml(item);
+                issueTransSelect.innerHTML += `<option value="${safeVal}">${safeVal}</option>`;
+            }
+            if (item.list_type === 'currency') currBody.innerHTML += rowHtml(item);
+            if (item.list_type === 'issue_category') {
+                catBody.innerHTML += rowHtml(item);
+                issueCatSelect.innerHTML += `<option value="${safeVal}">${safeVal}</option>`;
+            }
+        });
+    }
+
+    async function addListItem(list_type, inputId) {
+        const val = document.getElementById(inputId).value.trim();
+        if (!val) return;
+        await fetch('/api/admin/system-lists', { method: 'POST', headers, body: JSON.stringify({ list_type, value: val }) });
+        document.getElementById(inputId).value = '';
+        loadSystemConfig(); loadLogs();
+    }
+
+    async function editListItem(id) {
+        const found = sysConfig.lists.find(x => x.id === id);
+        const oldVal = found ? found.value : '';
+        const { value: newVal } = await Swal.fire({ title: i18n.t('edit_value_title'), input: 'text', inputValue: oldVal, showCancelButton: true });
+        if (newVal && newVal.trim() !== '') {
+            await fetch(`/api/admin/system-lists/${id}`, { method: 'PUT', headers, body: JSON.stringify({ value: newVal.trim() }) });
+            loadSystemConfig(); loadLogs();
+        }
+    }
+
+    async function deleteListItem(id) {
+        if (!confirm(i18n.t('confirm_delete_item'))) return;
+        await fetch(`/api/admin/system-lists/${id}`, { method: 'DELETE', headers });
+        loadSystemConfig(); loadLogs();
+    }
+
+    async function loadUsers() {
+        try {
+            const res = await fetch('/api/admin/users', { headers });
+            allUsers = await res.json();
+            updateUserStats();
+            renderUsersList(allUsers);
+        } catch (e) {
+            console.error('Error loading users:', e);
+        }
+    }
+
+    function updateUserStats() {
+        const total = allUsers.length;
+        const admins = allUsers.filter(u => u.role === 'admin').length;
+        const agents = allUsers.filter(u => u.role === 'agent').length;
+        const employees = allUsers.filter(u => u.role === 'employee').length;
+
+        const elTotal = document.getElementById('statTotalUsers');
+        const elAdmins = document.getElementById('statAdmins');
+        const elAgents = document.getElementById('statAgents');
+        const elEmployees = document.getElementById('statEmployees');
+
+        if (elTotal) elTotal.textContent = total;
+        if (elAdmins) elAdmins.textContent = admins;
+        if (elAgents) elAgents.textContent = agents;
+        if (elEmployees) elEmployees.textContent = employees;
+    }
+
+    function filterUsersTable(query) {
+        const q = String(query || '').trim().toLowerCase();
+        if (!q) {
+            renderUsersList(allUsers);
+            return;
+        }
+        const filtered = allUsers.filter(u =>
+            (u.full_name && u.full_name.toLowerCase().includes(q)) ||
+            (u.email && u.email.toLowerCase().includes(q)) ||
+            (u.username && u.username.toLowerCase().includes(q)) ||
+            (u.dept_name && u.dept_name.toLowerCase().includes(q)) ||
+            (u.role && u.role.toLowerCase().includes(q))
+        );
+        renderUsersList(filtered);
+    }
+
+    function renderUsersList(users) {
+        const tbody = document.getElementById('usersBody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        const isEn = i18n.getLanguage() === 'en';
+        const editTxt = isEn ? 'Edit' : 'تعديل';
+        const approveTxt = isEn ? 'Approve' : 'اعتماد';
+        const viewAllTxt = isEn ? 'All Depts' : 'شامل';
+        const deleteTxt = isEn ? 'Delete' : 'حذف';
+
+        if (!users || users.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">لا توجد حسابات مطابقة للبحث</td></tr>`;
+            return;
+        }
+
+        users.forEach(u => {
+            let p = {}; try { p = JSON.parse(u.permissions || '{}'); } catch (e) {}
+            const permsBadges = [
+                p.can_export ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 me-1">Excel</span>' : '',
+                p.can_approve ? `<span class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-25 me-1">${approveTxt}</span>` : '',
+                p.can_view_all ? `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 me-1">${viewAllTxt}</span>` : '',
+                p.can_delete ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 me-1">${deleteTxt}</span>` : ''
+            ].join('') || '<span class="text-muted small">افتراضية</span>';
+
+            const roleBadges = {
+                admin: '<span class="badge bg-primary px-2.5 py-1.5"><i class="bi bi-shield-check me-1"></i>مدير نظام</span>',
+                agent: '<span class="badge bg-success px-2.5 py-1.5"><i class="bi bi-headset me-1"></i>مختص قسم</span>',
+                employee: '<span class="badge bg-secondary px-2.5 py-1.5"><i class="bi bi-person me-1"></i>موظف عادي</span>'
+            };
+            const roleBadge = roleBadges[u.role] || `<span class="badge bg-dark">${escapeHtml(u.role)}</span>`;
+
+            const initials = (u.full_name || 'U').split(' ').map(w => w[0]).slice(0, 2).join('');
+            const delBtn = u.id !== 1 ? `<button class="btn btn-outline-danger btn-sm" onclick="deleteUser(${u.id})" title="حذف الحساب"><i class="bi bi-trash"></i></button>` : '';
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="rounded-circle bg-primary bg-opacity-10 text-primary fw-bold d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; font-size: 13px;">
+                                ${escapeHtml(initials)}
+                            </div>
+                            <div>
+                                <div class="fw-bold text-dark">${escapeHtml(u.full_name)}</div>
+                                <small class="text-muted">ID: #${u.id}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td dir="ltr" class="text-start">
+                        <span class="text-primary fw-semibold"><i class="bi bi-envelope-at me-1"></i>${escapeHtml(u.email || (u.username + '@tickets.com'))}</span>
+                    </td>
+                    <td>
+                        <div class="d-flex flex-column gap-1">
+                            <div>${roleBadge}</div>
+                            <small class="text-muted"><i class="bi bi-building me-1"></i>${escapeHtml(u.dept_name || 'الإدارة العامة')}</small>
+                        </div>
+                    </td>
+                    <td>${permsBadges}</td>
+                    <td class="text-center">
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary btn-sm" onclick="openEditUser(${u.id})" title="تعديل الحساب وكلمة المرور">
+                                <i class="bi bi-pencil-square me-1"></i>${editTxt}
+                            </button>
+                            ${delBtn}
+                        </div>
+                    </td>
+                </tr>`;
+        });
+    }
+
+    function openEditUser(id) {
+        const u = allUsers.find(x => x.id === id);
+        if (!u) return;
+        let p = {}; try { p = JSON.parse(u.permissions || '{}'); } catch (e) {}
+
+        document.getElementById('editUserId').value = u.id;
+        document.getElementById('editFullName').value = u.full_name;
+        document.getElementById('editEmail').value = u.email || '';
+        document.getElementById('editRole').value = u.role;
+        document.getElementById('editDept').value = u.department_id || '';
+        document.getElementById('editPassword').value = '';
+        document.getElementById('editPermExport').checked = !!p.can_export;
+        document.getElementById('editPermApprove').checked = !!p.can_approve;
+        document.getElementById('editPermViewAll').checked = !!p.can_view_all;
+        document.getElementById('editPermDelete').checked = !!p.can_delete;
+
+        new bootstrap.Modal(document.getElementById('editUserModal')).show();
+    }
+
+    async function saveUserEdits() {
+        const id = document.getElementById('editUserId').value;
+        const payload = {
+            full_name: document.getElementById('editFullName').value.trim(),
+            email: document.getElementById('editEmail').value.trim(),
+            role: document.getElementById('editRole').value,
+            department_id: document.getElementById('editDept').value || null,
+            new_password: document.getElementById('editPassword').value,
+            permissions: {
+                can_export: document.getElementById('editPermExport').checked,
+                can_approve: document.getElementById('editPermApprove').checked,
+                can_view_all: document.getElementById('editPermViewAll').checked,
+                can_delete: document.getElementById('editPermDelete').checked
+            }
+        };
+        const res = await fetch(`/api/admin/users/${id}`, { method: 'PUT', headers, body: JSON.stringify(payload) });
+        if (res.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('editUserModal')).hide();
+            Swal.fire({ icon: 'success', title: i18n.t('user_updated_alert'), timer: 1200, showConfirmButton: false });
+            loadUsers(); loadLogs();
+        } else {
+            const err = await res.json();
+            Swal.fire(i18n.t('error'), err.error || 'خطأ في التحديث', 'error');
+        }
+    }
+
+    document.getElementById('deptForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await fetch('/api/admin/departments', {
+            method: 'POST', headers,
+            body: JSON.stringify({ name: document.getElementById('deptName').value.trim(), sla_hours: document.getElementById('deptSla').value })
+        });
+        document.getElementById('deptForm').reset();
+        loadSystemConfig(); loadLogs();
+    });
+
+    document.getElementById('issueForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await fetch('/api/admin/issues', {
+            method: 'POST', headers,
+            body: JSON.stringify({
+                category: document.getElementById('issueCatSelect').value,
+                title: document.getElementById('issueTitleInput').value.trim(),
+                default_transaction_type: document.getElementById('issueTransSelect').value
+            })
+        });
+        document.getElementById('issueTitleInput').value = '';
+        Swal.fire({ icon: 'success', title: i18n.t('issue_added_alert'), timer: 1200, showConfirmButton: false });
+        loadSystemConfig(); loadLogs();
+    });
+
+    document.getElementById('cannedForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await fetch('/api/admin/canned-responses', {
+            method: 'POST', headers,
+            body: JSON.stringify({
+                label: document.getElementById('cannedLabel').value.trim(),
+                content: document.getElementById('cannedContent').value.trim()
+            })
+        });
+        document.getElementById('cannedForm').reset();
+        Swal.fire({ icon: 'success', title: i18n.t('canned_saved_alert'), timer: 1200, showConfirmButton: false });
+        loadSystemConfig(); loadLogs();
+    });
+
+    document.getElementById('userForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const emailVal = document.getElementById('userEmail').value.trim().toLowerCase();
+        const usernameVal = document.getElementById('username').value.trim() || emailVal;
+        const payload = {
+            full_name: document.getElementById('fullName').value.trim(),
+            email: emailVal,
+            username: usernameVal,
+            password: document.getElementById('password').value,
+            role: document.getElementById('role').value,
+            department_id: document.getElementById('userDept').value || null,
+            permissions: {
+                can_export: document.getElementById('permExport').checked,
+                can_approve: document.getElementById('permApprove').checked,
+                can_view_all: document.getElementById('permViewAll').checked,
+                can_delete: document.getElementById('permDelete').checked
+            }
+        };
+        const res = await fetch('/api/admin/users', { method: 'POST', headers, body: JSON.stringify(payload) });
+        if (res.ok) {
+            document.getElementById('userForm').reset();
+            toggleDept(); loadUsers(); loadLogs();
+            Swal.fire({ icon: 'success', title: 'تم إنشاء الحساب ومزامنته مع Firebase بنجاح', timer: 1400, showConfirmButton: false });
+        } else {
+            const err = await res.json();
+            Swal.fire('خطأ', err.error || 'فشل إنشاء الحساب', 'error');
+        }
+    });
+
+    async function deleteDept(id) { if (confirm(i18n.t('confirm_delete_dept'))) { await fetch(`/api/admin/departments/${id}`, { method: 'DELETE', headers }); loadSystemConfig(); loadLogs(); } }
+    async function deleteUser(id) { if (confirm(i18n.t('confirm_delete_user'))) { await fetch(`/api/admin/users/${id}`, { method: 'DELETE', headers }); loadUsers(); loadLogs(); } }
+
+    async function loadLogs() {
+        const res = await fetch('/api/admin/security-logs', { headers });
+        allSecurityLogs = await res.json();
+        renderLogs();
+    }
+
+    function renderLogs() {
+        const locale = i18n.getLanguage() === 'en' ? 'en-US' : 'ar-EG';
+        const searchEl = document.getElementById('searchLogsInput');
+        const query = searchEl ? searchEl.value.trim().toLowerCase() : '';
+        const filtered = query
+            ? allSecurityLogs.filter(l =>
+                String(l.username || '').toLowerCase().includes(query) ||
+                String(l.action || '').toLowerCase().includes(query) ||
+                String(l.details || '').toLowerCase().includes(query) ||
+                String(l.ip_address || '').toLowerCase().includes(query)
+            )
+            : allSecurityLogs;
+
+        document.getElementById('logsBody').innerHTML = filtered.map(l => `
+            <tr>
+                <td>${parseUtcDate(l.created_at).toLocaleString(locale)}</td>
+                <td class="fw-bold">${escapeHtml(l.username)}</td>
+                <td><span class="badge bg-secondary">${escapeHtml(l.action)}</span></td>
+                <td>${escapeHtml(l.details)}</td>
+                <td><code>${escapeHtml(l.ip_address)}</code></td>
+            </tr>
+        `).join('');
+    }
+
+    document.getElementById('slaSettingsForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = {
+            sla_mode: document.getElementById('slaModeSelect').value,
+            sla_urgent_hours: parseFloat(document.getElementById('slaUrgentInput').value) || 1,
+            sla_high_hours: parseFloat(document.getElementById('slaHighInput').value) || 2,
+            sla_medium_hours: parseFloat(document.getElementById('slaMediumInput').value) || 4,
+            sla_low_hours: parseFloat(document.getElementById('slaLowInput').value) || 24,
+            sla_pause_on_pending: document.getElementById('slaPausePendingCheck').checked,
+            sla_pause_on_approval: document.getElementById('slaPauseApprovalCheck').checked,
+            sla_reset_on_transfer: document.getElementById('slaResetTransferCheck').checked,
+            sla_auto_escalate: document.getElementById('slaAutoEscalateCheck').checked
+        };
+        const res = await fetch('/api/admin/sla-settings', { method: 'POST', headers, body: JSON.stringify(payload) });
+        if (res.ok) {
+            Swal.fire({ icon: 'success', title: i18n.t('sla_settings_saved_title'), text: i18n.t('sla_settings_saved_desc'), timer: 1600, showConfirmButton: false });
+            loadSystemConfig();
+            loadLogs();
+        }
+    });
+
+    async function recalculateActiveSla(fromNow) {
+        const confirmMsg = fromNow
+            ? i18n.t('sla_reset_confirm')
+            : i18n.t('sla_recalc_confirm');
+        const { isConfirmed } = await Swal.fire({
+            title: fromNow ? i18n.t('sla_reset_title') : i18n.t('sla_recalc_title'),
+            text: confirmMsg,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: i18n.t('yes_execute'),
+            cancelButtonText: i18n.t('cancel')
+        });
+        if (!isConfirmed) return;
+
+        const res = await fetch('/api/admin/sla-recalculate', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ from_now: !!fromNow })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            Swal.fire({ icon: 'success', title: i18n.t('success'), text: data.message, timer: 1800, showConfirmButton: false });
+            loadLogs();
+        }
+    }
+
+    // 1. تحميل إعدادات القواعد عند فتح الصفحة
+    async function loadRulesEngine() {
+        const res = await fetch('/api/admin/rules', { headers });
+        const data = await res.json();
+        document.getElementById('ruleAmount').value = data.amount_limit || 10000;
+        document.getElementById('ruleKeywords').value = (data.keywords || []).join(', ');
+    }
+
+    // 2. حفظ التعديلات
+    document.getElementById('rulesForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const keywordsArray = document.getElementById('ruleKeywords').value
+            .split(',')
+            .map(k => k.trim())
+            .filter(k => k.length > 0);
+            
+        const payload = {
+            amount_limit: document.getElementById('ruleAmount').value,
+            keywords: keywordsArray
+        };
+
+        const res = await fetch('/api/admin/rules', { method: 'POST', headers, body: JSON.stringify(payload) });
+        if (res.ok) {
+            Swal.fire({ icon: 'success', title: i18n.t('rules_updated_title'), text: i18n.t('rules_updated_desc'), timer: 2000, showConfirmButton: false });
+            loadLogs(); // لتحديث سجل الرقابة
+        }
+    });
+
+    // 3. تصدير تقرير التدقيق المالي
+    async function exportAuditReport() {
+        const res = await fetch('/api/admin/audit-report', { headers });
+        const logs = await res.json();
+        
+        if (logs.length === 0) return Swal.fire(i18n.t('warning'), i18n.t('no_audit_logs'), 'info');
+
+        const isEn = i18n.getLanguage() === 'en';
+        const locale = isEn ? 'en-US' : 'ar-EG';
+        let csv = isEn
+            ? '\uFEFFTicket ID,Title,Amount,Currency,Operator,Role,Timestamp,Action Type,Decision Details,IP Address\n'
+            : '\uFEFFرقم التيكت,العنوان,المبلغ,العملة,الموظف المنفذ,الدور,توقيت العملية,نوع الإجراء,تفاصيل القرار,رقم الـ IP\n';
+        logs.forEach(l => {
+            const cleanContent = (l.content || '').replace(/"/g, '""'); // تنظيف الفواصل
+            csv += `${l.ticket_id},"${l.title}","${l.amount || 0}","${l.currency || ''}","${l.user_name}","${l.role}","${parseUtcDate(l.created_at).toLocaleString(locale)}","${l.action_type}","${cleanContent}","${l.ip_address}"\n`;
+        });
+
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+        link.download = `Maker_Checker_Audit_Report_${new Date().toISOString().slice(0,10)}.csv`;
+        link.click();
+    }
+
+    async function loadDeletedTickets() {
+        const res = await fetch('/api/admin/deleted-tickets', { headers });
+        if (!res.ok) return;
+        const rows = await res.json();
+        const tbody = document.getElementById('deletedTicketsBody');
+        if (!tbody) return;
+        const locale = i18n.getLanguage() === 'en' ? 'en-US' : 'ar-EG';
+
+        if (!rows.length) {
+            tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-3">${i18n.t('no_deleted_tickets')}</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = rows.map(r => `
+            <tr>
+                <td class="fw-bold text-danger">#${r.id}</td>
+                <td class="fw-bold">${escapeHtml(r.title)}</td>
+                <td>${escapeHtml(r.client_email || '-')}</td>
+                <td>${escapeHtml((r.amount || 0) + ' ' + (r.currency || ''))}</td>
+                <td><span class="badge bg-secondary">${escapeHtml(r.dept_name || '-')}</span></td>
+                <td>${escapeHtml(r.deleted_by_name || '-')}</td>
+                <td>${r.deleted_at ? parseUtcDate(r.deleted_at).toLocaleString(locale) : '-'}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-success fw-bold" onclick="restoreDeletedTicket(${r.id})">
+                        <i class="bi bi-arrow-counterclockwise"></i> ${i18n.t('btn_restore_ticket')}
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function restoreDeletedTicket(id) {
+        if (!confirm(i18n.t('confirm_restore_ticket'))) return;
+        const res = await fetch(`/api/admin/tickets/${id}/restore`, { method: 'POST', headers });
+        if (res.ok) {
+            Swal.fire({ icon: 'success', title: i18n.t('ticket_restored_alert'), timer: 1400, showConfirmButton: false });
+            loadDeletedTickets();
+            loadLogs();
+        }
+    }
+
+    function toggleSmtpPassVisibility() {
+        const pass = document.getElementById('smtpPassInput');
+        const icon = document.getElementById('smtpPassEye');
+        if (pass.type === 'password') {
+            pass.type = 'text';
+            icon.className = 'bi bi-eye-slash';
+        } else {
+            pass.type = 'password';
+            icon.className = 'bi bi-eye';
+        }
+    }
+
+    loadSystemConfig();
+    loadUsers();
+    loadLogs();
+    loadRulesEngine();
+    loadDeletedTickets();
+
+    window.addEventListener('languageChanged', () => {
+        renderDepartments();
+        renderLists();
+        renderIssues();
+        renderCanned();
+        loadUsers();
+        renderLogs();
+        loadDeletedTickets();
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "System user (admin, agent, or employee)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "id": { "type": "number", "description": "Numeric user ID for legacy compatibility" },
+        "full_name": { "type": "string", "description": "Full name of the employee" },
+        "username": { "type": "string", "description": "Username" },
+        "email": { "type": "string", "format": "email", "description": "Corporate email address" },
+        "role": { "type": "string", "enum": ["admin", "agent", "employee"], "description": "User role" },
+        "department_id": { "type": "number", "description": "Assigned department ID" },
+        "dept_name": { "type": "string", "description": "Assigned department name" },
+        "permissions": { "type": "object", "description": "Fine-grained RBAC permissions" },
+        "must_change_password": { "type": "boolean", "description": "Whether password change is required" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["full_name", "email", "role"]
+    },
+    "Department": {
+      "title": "Department",
+      "description": "Operational department with SLA target hours",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "Department ID" },
+        "name": { "type": "string", "description": "Department name" },
+        "code": { "type": "string", "description": "Department code" },
+        "sla_hours": { "type": "number", "description": "Target SLA hours" },
+        "status": { "type": "string", "enum": ["active", "inactive"], "description": "Department status" }
+      },
+      "required": ["name", "sla_hours", "status"]
+    },
+    "Ticket": {
+      "title": "Ticket",
+      "description": "Support or financial operations ticket",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "Ticket sequential number" },
+        "title": { "type": "string", "description": "Ticket title" },
+        "description": { "type": "string", "description": "Detailed description" },
+        "status": {
+          "type": "string",
+          "enum": ["open", "in_progress", "pending", "pending_approval", "resolved", "closed"],
+          "description": "Current ticket status"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "urgent"],
+          "description": "Ticket priority level"
+        },
+        "creator_id": { "type": "string", "description": "Creator user ID/UID" },
+        "department_id": { "type": "number", "description": "Target department ID" },
+        "assigned_agent_id": { "type": "string", "description": "Assigned agent ID/UID" },
+        "client_account": { "type": "string", "description": "Client account number" },
+        "amount": { "type": "number", "description": "Transaction amount" },
+        "currency": { "type": "string", "description": "Transaction currency" },
+        "attachment_url": { "type": "string", "description": "Firebase Cloud Storage download URL" },
+        "attachment_path": { "type": "string", "description": "Storage path or URL" },
+        "attachment_name": { "type": "string", "description": "Original attachment file name" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["title", "description", "status", "priority", "department_id"]
+    },
+    "SecurityLog": {
+      "title": "SecurityLog",
+      "description": "Audit and security log entry",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string", "description": "User ID" },
+        "username": { "type": "string", "description": "Username" },
+        "action": { "type": "string", "description": "Action type" },
+        "details": { "type": "string", "description": "Action details" },
+        "ip_address": { "type": "string", "description": "Client IP address" },
+        "created_at": { "type": "string", "format": "date-time", "description": "Timestamp" }
+      },
+      "required": ["action", "created_at"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "System users and RBAC profiles"
+    },
+    "/departments/{deptId}": {
+      "schema": { "$ref": "#/entities/Department" },
+      "description": "Operational departments and SLA settings"
+    },
+    "/tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/Ticket" },
+      "description": "Tickets and financial operations records"
+    },
+    "/security_logs/{logId}": {
+      "schema": { "$ref": "#/entities/SecurityLog" },
+      "description": "Security audit logs"
+    }
+  }
+}

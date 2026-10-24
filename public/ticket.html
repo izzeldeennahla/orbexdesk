@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <script>
+        (function() {
+            function makeFetchWritable( descriptor ) {
+                if (!descriptor || typeof descriptor !== 'object') return descriptor;
+                var d = Object.assign({}, descriptor);
+                d.configurable = true;
+                if ('get' in d || 'set' in d) {
+                    var origGet = d.get;
+                    var origSet = d.set;
+                    var currentVal;
+                    var hasVal = false;
+                    d.get = function() {
+                        if (hasVal) return currentVal;
+                        return typeof origGet === 'function' ? origGet.call(this) : currentVal;
+                    };
+                    d.set = function(fn) {
+                        currentVal = fn;
+                        hasVal = true;
+                        if (typeof origSet === 'function') {
+                            try { origSet.call(this, fn); } catch (e) {}
+                        }
+                    };
+                } else {
+                    d.writable = true;
+                }
+                return d;
+            }
+            try {
+                var origDefineProperty = Object.defineProperty;
+                Object.defineProperty = function(target, prop, descriptor) {
+                    if (prop === 'fetch' && (target === window || (typeof Window !== 'undefined' && target === Window.prototype))) {
+                        descriptor = makeFetchWritable(descriptor);
+                    }
+                    return origDefineProperty.call(Object, target, prop, descriptor);
+                };
+                if (typeof Reflect !== 'undefined' && typeof Reflect.defineProperty === 'function') {
+                    var origReflectDefine = Reflect.defineProperty;
+                    Reflect.defineProperty = function(target, prop, descriptor) {
+                        if (prop === 'fetch' && (target === window || (typeof Window !== 'undefined' && target === Window.prototype))) {
+                            descriptor = makeFetchWritable(descriptor);
+                        }
+                        return origReflectDefine.call(Reflect, target, prop, descriptor);
+                    };
+                }
+            } catch (e) {}
+            try {
+                var currentFetch = window.fetch;
+                if (typeof currentFetch === 'function') {
+                    Object.defineProperty(window, 'fetch', {
+                        configurable: true,
+                        enumerable: true,
+                        get: function() { return currentFetch; },
+                        set: function(fn) { currentFetch = fn; }
+                    });
+                }
+            } catch (e) {}
+            try {
+                if (typeof Window !== 'undefined' && Window.prototype) {
+                    var protoFetch = Window.prototype.fetch;
+                    if (typeof protoFetch === 'function') {
+                        Object.defineProperty(Window.prototype, 'fetch', {
+                            configurable: true,
+                            enumerable: true,
+                            get: function() { return protoFetch; },
+                            set: function(fn) { protoFetch = fn; }
+                        });
+                    }
+                }
+            } catch (e) {}
+            window.addEventListener('error', function(ev) {
+                if ((ev && ev.filename && String(ev.filename).indexOf('chrome-extension://') === 0) ||
+                    (ev && ev.message && String(ev.message).indexOf('Cannot set property fetch') !== -1)) {
+                    ev.stopImmediatePropagation();
+                    ev.preventDefault();
+                    return true;
+                }
+            }, true);
+        })();
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="ticket_page_title">معالجة التيكت | OrbexDesk</title>
+    <link rel="icon" type="image/png" href="/assets/orbex-logo.png">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link id="bootstrap-css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="/i18n.js"></script>
+    <style>
+        :root {
+            --orbex-crimson: #B91C1C;
+            --primary: #B91C1C;
+            --primary-hover: #991B1B;
+        }
+        body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; color: #1e293b; transition: background 0.2s, color 0.2s; }
+        .top-nav { background: #0b1120; color: #fff; padding: 14px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #b91c1c; }
+        .card-custom { background: #fff; border-radius: 14px; border: 1px solid #e2e8f0; padding: 20px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(15,23,42,0.03); }
+        .btn-primary { background-color: #b91c1c !important; border-color: #b91c1c !important; }
+        .btn-primary:hover, .btn-primary:focus { background-color: #991b1b !important; border-color: #991b1b !important; }
+        .btn-outline-primary { color: #b91c1c !important; border-color: #b91c1c !important; }
+        .btn-outline-primary:hover { background-color: #b91c1c !important; color: #fff !important; }
+        .text-primary { color: #b91c1c !important; }
+        
+        /* Prominent Financial Hero Strip */
+        .fin-hero-box { background: linear-gradient(135deg, #f8fafc, #f1f5f9); border: 1px solid #e2e8f0; border-right: 4px solid #b91c1c; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+        body.dark-mode .fin-hero-box { background: linear-gradient(135deg, #0f172a, #1e293b); border-color: #334155; border-right-color: #b91c1c; }
+        .info-label { font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 3px; }
+        .info-value { font-size: 13px; font-weight: 700; color: #0f172a; background: #f8fafc; padding: 7px 10px; border-radius: 8px; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; min-height: 36px; }
+        
+        /* Connected Vertical Timeline Track */
+        .timeline-box { max-height: 480px; overflow-y: auto; padding: 18px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; position: relative; }
+        .tl-item { padding: 14px 16px; border-radius: 12px; margin-bottom: 12px; background: #fff; border: 1px solid #e2e8f0; position: relative; transition: border-color 0.15s ease; }
+        .tl-internal { background: #fefce8; border: 1px solid #fde047; }
+        .tl-system { background: #f1f5f9; border-right: 3px solid #0f172a; padding: 9px 14px; font-size: 12px; color: #334155; border-radius: 8px; }
+        .canned-btn { font-size: 11px; border-radius: 8px; padding: 4px 10px; font-weight: 700; transition: all 0.15s; }
+        .canned-btn:hover { transform: translateY(-1px); }
+
+        /* Smart Reply Composer Modes */
+        .reply-composer-box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; background: #ffffff; transition: all 0.2s ease; }
+        .reply-composer-box.composer-internal-mode { background: #fffbeb !important; border-color: #f59e0b !important; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12); }
+        body.dark-mode .reply-composer-box { background: #0f172a; border-color: #334155; }
+        body.dark-mode .reply-composer-box.composer-internal-mode { background: #422006 !important; border-color: #d97706 !important; }
+
+        /* الوضع الليلي */
+        body.dark-mode { background-color: #0b1120; color: #e2e8f0; }
+        body.dark-mode .card-custom, body.dark-mode .tl-item { background-color: #1e293b; color: #f8fafc; border-color: #334155; }
+        body.dark-mode .info-value, body.dark-mode .timeline-box, body.dark-mode .bg-light { background-color: #0f172a !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+        body.dark-mode .tl-internal { background-color: #422006; border-color: #ca8a04; color: #fef08a; }
+        body.dark-mode .tl-system { background-color: #0f172a; color: #cbd5e1; border-color: #b91c1c; }
+        body.dark-mode .form-control, body.dark-mode .form-select { background-color: #0f172a; border-color: #334155; color: #f8fafc; }
+
+        /* تنسيق سند التدقيق الرسمي عند الطباعة (Audit PDF Print Mode) */
+        @media print {
+            .top-nav, #agentControlPanel, #replyForm, #cannedResponsesContainer, #collisionBanner, .btn { display: none !important; }
+            .timeline-box { max-height: none !important; overflow: visible !important; }
+            body { background: #fff !important; color: #000 !important; }
+            .card-custom { box-shadow: none !important; border: 1px solid #000 !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="top-nav">
+    <div class="d-flex align-items-center gap-3">
+        <a href="dashboard.html" class="d-flex align-items-center gap-2 text-decoration-none me-2">
+            <div style="width: 32px; height: 32px; background: #fff; border-radius: 8px; padding: 3px; display: flex; align-items: center; justify-content: center;">
+                <img src="/assets/orbex-logo.png" alt="OrbexDesk" style="width: 100%; height: 100%; object-fit: contain;">
+            </div>
+            <span style="font-size: 16px; font-weight: 900; color: #fff;">Orbex<span style="color: #b91c1c;">Desk</span></span>
+        </a>
+        <a href="dashboard.html" class="btn btn-outline-light btn-sm fw-bold">
+            <i class="bi bi-arrow-right me-1" id="navBackIcon"></i> <span data-i18n="dashboard">لوحة العمليات</span>
+        </a>
+        <h5 class="mb-0 fw-bold num-tabular" id="headerTicketId">تيكت #...</h5>
+        <span id="handoverTopBadge" class="badge bg-warning text-dark" style="display: none;" data-i18n="badge_handover"><i class="bi bi-pin-angle-fill me-1"></i> مدرج في تسليم الشفت</span>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <!-- زر تبديل اللغة المباشر (Instant Language Toggle Button) -->
+        <button type="button" class="btn btn-outline-light btn-sm fw-bold d-inline-flex align-items-center gap-2 px-3" id="langToggleBtn" onclick="i18n.toggleLanguage()" title="تبديل لغة النظام | Switch Language" style="cursor: pointer; user-select: none;">
+            <i class="bi bi-translate text-warning fs-6" style="pointer-events: none;"></i>
+            <span class="lang-btn-label" id="currentLangLabel" style="pointer-events: none;">English</span>
+        </button>
+        <button type="button" class="btn btn-outline-light btn-sm" onclick="toggleTicketDarkMode()" id="ticketDarkBtn" title="الوضع الليلي / النهاري" data-i18n-title="dark_mode_title">
+            <i class="bi bi-moon-stars-fill"></i>
+        </button>
+        <button class="btn btn-warning btn-sm fw-bold" onclick="window.print()">
+            <i class="bi bi-printer-fill me-1"></i> <span data-i18n="print_audit_pdf">طباعة سند تدقيق (PDF / Audit)</span>
+        </button>
+        <div id="headerUser" class="small text-white-50 ms-2"></div>
+    </div>
+</div>
+
+<div class="container-fluid px-4 py-3">
+    <!-- شريط كاشف التضارب الحي (Live Collision Detection Banner) -->
+    <div id="collisionBanner" class="alert alert-info py-2 px-3 mb-3 d-flex justify-content-between align-items-center shadow-sm" style="border-radius: 10px;">
+        <div><i class="bi bi-eye-fill me-2"></i><strong data-i18n="viewers_banner_title">المتواجدون في هذا التيكت الآن:</strong> <span id="viewersListText" data-i18n="only_you">أنت فقط</span></div>
+        <div id="typingIndicator" class="fw-bold text-danger small"></div>
+    </div>
+
+    <!-- شريط ملاحظة تسليم الشفت (Shift Handover Note Banner) -->
+    <div id="handoverAlertBanner" class="alert alert-warning border-warning py-2 px-3 mb-3 shadow-sm" style="display: none; border-radius: 10px;">
+        <i class="bi bi-pin-angle-fill me-1"></i> <strong data-i18n="handover_banner_prefix">ملاحظة تسليم الشفت القادم:</strong>
+        <span id="handoverNoteText" class="fw-semibold ms-1"></span>
+    </div>
+
+    <div class="row">
+        
+        <div class="col-md-4">
+            <div class="card-custom border-danger bg-danger bg-opacity-10" id="approvalCard" style="display: none;">
+                <h6 class="fw-bold text-danger"><i class="bi bi-shield-lock-fill me-1"></i><span data-i18n="approval_card_title">مطلوب اعتماد المشرف (Maker-Checker)</span></h6>
+                <p class="small mb-2" data-i18n="approval_card_desc">هذه الحركة حساسة وتنتظر تعميد المدير أو المخول بالاعتماد.</p>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-success btn-sm w-50 fw-bold" onclick="submitApproval('approve')" data-i18n="btn_approve"><i class="bi bi-check-lg me-1"></i> موافقة وتعميد</button>
+                    <button class="btn btn-danger btn-sm w-50 fw-bold" onclick="submitApproval('reject')" data-i18n="btn_reject"><i class="bi bi-x-lg me-1"></i> رفض وإغلاق</button>
+                </div>
+            </div>
+
+            <div class="card-custom">
+                <h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="bi bi-credit-card-2-front me-2"></i><span data-i18n="client_financial_heading">بيانات العميل والحركة المالية</span></h6>
+                
+                <!-- شريط الملخص المالي البارز (Financial Hero Strip) -->
+                <div class="fin-hero-box">
+                    <div>
+                        <div class="info-label" data-i18n="lbl_amount">المبلغ والعملة</div>
+                        <div class="fs-5 fw-bold text-success num-tabular" id="tAmount">-</div>
+                    </div>
+                    <div class="text-end">
+                        <div class="info-label" data-i18n="lbl_psp">بوابة الدفع (PSP)</div>
+                        <div class="fw-bold text-primary" id="tPsp">-</div>
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <div class="info-label" data-i18n="lbl_client_account">رقم حساب العميل</div>
+                        <div class="info-value"><span id="tClientAcc" class="num-tabular">-</span><button type="button" class="btn btn-sm py-0 px-1" onclick="copyText('tClientAcc', this)" title="نسخ" data-i18n-title="copy_tooltip"><i class="bi bi-clipboard"></i></button></div>
+                    </div>
+                    <div class="col-6">
+                        <div class="info-label" data-i18n="lbl_dpan">آخر 4 أرقام / DPAN</div>
+                        <div class="info-value num-tabular" id="tDpan">-</div>
+                    </div>
+                </div>
+
+                <div class="mb-2">
+                    <div class="info-label" data-i18n="lbl_txid_smart">الرقم المرجعي / TXID (مع الفحص الذكي)</div>
+                    <div class="info-value">
+                        <span id="tTransRef" class="text-truncate num-tabular" style="max-width: 170px;">-</span>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-light border py-0 px-1" onclick="copyText('tTransRef', this)" title="نسخ" data-i18n-title="copy_tooltip"><i class="bi bi-clipboard"></i></button>
+                            <a id="tronscanLink" href="#" target="_blank" class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size:10px;">Tronscan</a>
+                            <a id="bscscanLink" href="#" target="_blank" class="btn btn-sm btn-outline-warning text-dark py-0 px-1" style="font-size:10px;">BscScan</a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="info-label" data-i18n="lbl_client_email">البريد الإلكتروني</div>
+                    <div class="info-value"><span id="tClientEmail" class="text-truncate">-</span><button type="button" class="btn btn-sm py-0 px-1" onclick="copyText('tClientEmail', this)" title="نسخ" data-i18n-title="copy_tooltip"><i class="bi bi-clipboard"></i></button></div>
+                </div>
+
+                <div class="small border-top pt-2">
+                    <div class="d-flex justify-content-between mb-1"><span class="text-muted" data-i18n="lbl_current_dept">القسم الحالي:</span> <strong id="tDept">-</strong></div>
+                    <div class="d-flex justify-content-between mb-1"><span class="text-muted" data-i18n="lbl_assigned_agent">الموظف المستلم:</span> <strong id="tAgent" class="text-primary">-</strong></div>
+                    <div class="d-flex justify-content-between mb-1"><span class="text-muted" data-i18n="lbl_created_by">أنشئ بواسطة:</span> <strong id="tCreator">-</strong></div>
+                    <div class="d-flex justify-content-between mb-1"><span class="text-muted" data-i18n="lbl_sla_due_time">وقت استحقاق الـ SLA:</span> <strong id="tSlaDue" class="num-tabular" dir="ltr">-</strong></div>
+                    <div class="d-flex justify-content-between align-items-center mt-1 pt-1 border-top"><span class="text-muted" data-i18n="lbl_sla_indicator">مؤشر الـ SLA:</span> <span id="tSlaLiveBadge" class="num-tabular">-</span></div>
+                </div>
+            </div>
+
+            <div class="card-custom" id="agentControlPanel" style="display: none;">
+                <h6 class="fw-bold border-bottom pb-2 mb-3"><i class="bi bi-lightning-charge-fill text-warning me-1"></i><span data-i18n="agent_panel_heading">الأتمتة وتحويل الأقسام</span></h6>
+                
+                <div class="d-grid gap-2 mb-3">
+                    <button class="btn btn-outline-primary btn-sm fw-bold" onclick="assignToMe()">
+                        <i class="bi bi-hand-index-thumb me-1"></i> <span data-i18n="btn_assign_me">استلام التيكت (إسناد لنفسي)</span>
+                    </button>
+                    <button class="btn btn-success btn-sm fw-bold" onclick="autoApproveDealing()">
+                        <i class="bi bi-check2-circle me-1"></i> <span data-i18n="btn_auto_dealing">موافقة التداول وتحويل تلقائي للـ Back Office</span>
+                    </button>
+                    <button class="btn btn-outline-warning text-dark btn-sm fw-bold" onclick="toggleHandover()">
+                        <i class="bi bi-arrow-left-right me-1"></i> <span data-i18n="btn_toggle_handover">إدراج / إلغاء تسليم للشفت القادم</span>
+                    </button>
+                </div>
+
+                <div class="mb-2 border-top pt-2">
+                    <label class="form-label small fw-bold" data-i18n="lbl_transfer_to_dept">تحويل التيكت لقسم آخر:</label>
+                    <div class="input-group input-group-sm">
+                        <select id="transferDeptSelect" class="form-select"></select>
+                        <button class="btn btn-dark fw-bold" onclick="transferDepartment()" data-i18n="btn_do_transfer">تحويل</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-custom">
+                <h6 class="fw-bold text-secondary border-bottom pb-2 mb-2"><i class="bi bi-clock-history me-1"></i><span data-i18n="client_history_heading">سجل تذاكر العميل السابقة</span></h6>
+                <div id="clientHistoryList" class="small">...</div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card-custom">
+                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-primary" id="tStatusBadge">...</span>
+                        <span id="tPriorityBadge"></span>
+                        <span id="tHeaderSlaBadge"></span>
+                    </div>
+                    <small class="text-muted" id="tCreated"></small>
+                </div>
+                <h5 class="fw-bold mb-3" id="tTitle">...</h5>
+                <div class="p-3 bg-light rounded-3 border mb-3" id="tDescription" style="white-space: pre-wrap;"></div>
+                
+                <div id="tAttachmentArea" style="display: none;">
+                    <a id="tAttachmentLink" href="#" target="_blank" class="btn btn-sm btn-outline-dark fw-bold">
+                        <i class="bi bi-paperclip"></i> <span data-i18n="view_attachment">عرض المرفق:</span> <span id="tAttachmentName"></span>
+                    </a>
+                </div>
+                <div id="linkedChildrenArea" class="mt-3 pt-2 border-top" style="display: none;"></div>
+            </div>
+
+            <div class="card-custom">
+                <h6 class="fw-bold mb-3"><i class="bi bi-chat-left-text me-2"></i><span data-i18n="timeline_heading">الخط الزمني وسجل المعالجة الموثق بالـ IP (Audit Timeline)</span></h6>
+                <div class="timeline-box mb-3" id="timelineContainer"></div>
+
+                <div class="mb-2 d-flex flex-wrap gap-1 align-items-center" id="cannedResponsesContainer"></div>
+
+                <form id="replyForm" class="reply-composer-box">
+                    <div id="internalModeBanner" class="small fw-bold text-warning-emphasis bg-warning bg-opacity-25 px-3 py-1 rounded mb-2" style="display: none;" data-i18n="internal_note_mode_active">
+                        🔒 وضع الملاحظة الداخلية السرية مفعّل — لن يظهر هذا الرد إلا لفريق العمل الداخلي
+                    </div>
+                    <textarea id="replyContent" class="form-control mb-2" rows="3" oninput="notifyTyping()" placeholder="اكتب الرد هنا... (اضغط Ctrl+Enter للإرسال السريع، أو Ctrl+V للصق صورة)" data-i18n-placeholder="reply_placeholder"></textarea>
+                    <div id="replyPasteNotice" class="small text-success fw-bold mb-2"></div>
+
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-3">
+                            <input type="file" id="replyAttachment" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-2">
+                            <select id="mentionUserSelect" class="form-select form-select-sm" title="إشارة لزميل @Mention" data-i18n-title="mention_colleague_tooltip">
+                                <option value="" data-i18n="mention_placeholder">@ إشارة لزميل...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2" id="noteTypeWrapper" style="display: none;">
+                            <select id="actionType" class="form-select form-select-sm fw-bold" onchange="toggleReplyComposerMode()">
+                                <option value="reply" data-i18n="opt_public_reply">رد عام للموظف</option>
+                                <option value="internal_note" data-i18n="opt_internal_note">ملاحظة داخلية للقسم</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3" id="statusUpdateWrapper" style="display: none;">
+                            <select id="newStatus" class="form-select form-select-sm">
+                                <option value="" data-i18n="opt_keep_status">-- إبقاء الحالة --</option>
+                                <option value="in_progress" data-i18n="status_in_progress">قيد المعالجة</option>
+                                <option value="pending" data-i18n="status_pending">بانتظار العميل (إيقاف مؤقت للـ SLA)</option>
+                                <option value="pending_approval" data-i18n="status_pending_approval">طلب اعتماد المشرف (Maker-Checker)</option>
+                                <option value="resolved" data-i18n="status_resolved">تم الحل (Resolved)</option>
+                                <option value="closed" data-i18n="status_closed">إغلاق نهائي</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 ms-auto">
+                            <button type="submit" id="sendReplyBtn" class="btn btn-primary btn-sm w-100 fw-bold py-2">
+                                <i class="bi bi-send-fill me-1"></i> <span data-i18n="btn_send_reply">إرسال</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (!token || !user) window.location.href = 'index.html';
+
+    if (localStorage.getItem('darkMode') === '1') {
+        document.body.classList.add('dark-mode');
+        const dkBtn = document.getElementById('ticketDarkBtn');
+        if (dkBtn) dkBtn.innerHTML = '<i class="bi bi-sun-fill text-warning"></i>';
+    }
+
+    function toggleTicketDarkMode() {
+        document.body.classList.toggle('dark-mode');
+        const isDark = document.body.classList.contains('dark-mode');
+        localStorage.setItem('darkMode', isDark ? '1' : '0');
+        const dkBtn = document.getElementById('ticketDarkBtn');
+        if (dkBtn) dkBtn.innerHTML = isDark ? '<i class="bi bi-sun-fill text-warning"></i>' : '<i class="bi bi-moon-stars-fill"></i>';
+    }
+
+    function toggleReplyComposerMode() {
+        const isInternal = document.getElementById('actionType')?.value === 'internal_note';
+        const formEl = document.getElementById('replyForm');
+        const bannerEl = document.getElementById('internalModeBanner');
+        const btnEl = document.getElementById('sendReplyBtn');
+        if (formEl) formEl.classList.toggle('composer-internal-mode', isInternal);
+        if (bannerEl) bannerEl.style.display = isInternal ? 'block' : 'none';
+        if (btnEl) {
+            btnEl.className = isInternal
+                ? 'btn btn-warning text-dark btn-sm w-100 fw-bold py-2'
+                : 'btn btn-primary btn-sm w-100 fw-bold py-2';
+        }
+    }
+
+    const ticketId = new URLSearchParams(window.location.search).get('id');
+    let currentTicket = null;
+    let replyPastedBlob = null;
+    let dynamicCannedList = [];
+
+    function updateHeaderUser() {
+        if (!user) return;
+        const isEn = i18n.getLanguage() === 'en';
+        const roleMap = { admin: isEn ? 'Admin' : 'مدير نظام', agent: isEn ? 'Agent' : 'مختص قسم', employee: isEn ? 'Employee' : 'موظف' };
+        document.getElementById('headerUser').innerText = `${user.full_name} (${roleMap[user.role] || user.role})`;
+    }
+    updateHeaderUser();
+
+    if (user.role === 'admin' || user.role === 'agent') {
+        document.getElementById('agentControlPanel').style.display = 'block';
+        document.getElementById('noteTypeWrapper').style.display = 'block';
+        document.getElementById('statusUpdateWrapper').style.display = 'block';
+    }
+
+    // اختصار الكيبورد Ctrl + Enter لإرسال الرد فوراً
+    document.getElementById('replyContent').addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'Enter') {
+            e.preventDefault();
+            document.getElementById('replyForm').dispatchEvent(new Event('submit'));
+        }
+    });
+
+    function playBeep() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(660, ctx.currentTime);
+            osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
+            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.28);
+        } catch (e) {}
+    }
+
+    window.addEventListener('paste', (e) => {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (let item of items) {
+            if (item.type.indexOf('image') === 0) {
+                replyPastedBlob = item.getAsFile();
+                document.getElementById('replyPasteNotice').innerText = i18n.t('reply_screenshot_ready');
+            }
+        }
+    });
+
+    function parseUtcDate(dateStr) {
+        if (!dateStr) return new Date();
+        const s = String(dateStr).trim();
+        if (s.includes('T') || s.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s)) return new Date(s);
+        return new Date(s.replace(' ', 'T') + 'Z');
+    }
+
+    function formatDurationShort(totalMins) {
+        const absMins = Math.abs(totalMins);
+        const days = Math.floor(absMins / 1440);
+        const hrs = Math.floor((absMins % 1440) / 60);
+        const mins = absMins % 60;
+        const dUnit = i18n.t('time_day_short');
+        const hUnit = i18n.t('time_hour_short');
+        const mUnit = i18n.t('time_minute_short');
+        if (days > 0) return `${days}${dUnit} ${hrs}${hUnit}`;
+        if (hrs > 0) return `${hrs}${hUnit} ${mins}${mUnit}`;
+        return `${mins}${mUnit}`;
+    }
+
+    function renderTicketSlaStatus(t) {
+        if (!t) return;
+        const dueEl = document.getElementById('tSlaDue');
+        const liveEl = document.getElementById('tSlaLiveBadge');
+        const headerEl = document.getElementById('tHeaderSlaBadge');
+        const prioEl = document.getElementById('tPriorityBadge');
+        const isEn = i18n.getLanguage() === 'en';
+
+        const prioMap = {
+            urgent: `<span class="badge bg-danger">${i18n.t('priority_urgent')}</span>`,
+            high: `<span class="badge bg-warning text-dark">${i18n.t('priority_high')}</span>`,
+            medium: `<span class="badge bg-info text-dark">${i18n.t('priority_medium')}</span>`,
+            low: `<span class="badge bg-secondary">${i18n.t('priority_low')}</span>`
+        };
+        if (prioEl) prioEl.innerHTML = prioMap[t.priority] || '';
+
+        if (dueEl) {
+            dueEl.innerText = t.sla_due_time ? parseUtcDate(t.sla_due_time).toLocaleString(isEn ? 'en-US' : 'ar-EG') : '-';
+        }
+
+        let badgeHtml = '-';
+        if (t.status === 'resolved' || t.status === 'closed') {
+            if (t.resolved_at && t.sla_due_time) {
+                const met = parseUtcDate(t.resolved_at) <= parseUtcDate(t.sla_due_time);
+                badgeHtml = met
+                    ? `<span class="badge bg-success">${i18n.t('sla_completed_ontime')}</span>`
+                    : `<span class="badge bg-warning text-dark">${i18n.t('sla_completed_late')}</span>`;
+            } else {
+                badgeHtml = `<span class="badge bg-success">${i18n.t('sla_completed')}</span>`;
+            }
+        } else if (t.sla_paused === 1) {
+            const reason = t.status === 'pending_approval' ? i18n.t('sla_paused_approval') : i18n.t('sla_paused_customer');
+            let remText = '';
+            if (t.sla_due_time && t.sla_paused_at) {
+                const frozenMins = Math.floor((parseUtcDate(t.sla_due_time) - parseUtcDate(t.sla_paused_at)) / 60000);
+                if (frozenMins > 0) remText = ` • ${i18n.t('sla_remaining_header')} ${formatDurationShort(frozenMins)}`;
+            }
+            badgeHtml = `<span class="badge bg-secondary">${reason}${remText}</span>`;
+        } else if (t.sla_due_time) {
+            const diffMins = Math.floor((parseUtcDate(t.sla_due_time) - new Date()) / 60000);
+            if (diffMins < 0) {
+                badgeHtml = `<span class="badge bg-danger">${i18n.t('sla_overdue')} (${formatDurationShort(diffMins)})</span>`;
+            } else if (diffMins < 30) {
+                badgeHtml = `<span class="badge bg-warning text-dark">${i18n.t('sla_remaining')} ${formatDurationShort(diffMins)}</span>`;
+            } else {
+                badgeHtml = `<span class="badge bg-success bg-opacity-10 text-success border border-success">${i18n.t('sla_remaining')} ${formatDurationShort(diffMins)}</span>`;
+            }
+        }
+
+        if (liveEl) liveEl.innerHTML = badgeHtml;
+        if (headerEl) headerEl.innerHTML = badgeHtml;
+    }
+
+    async function loadDynamicConfig() {
+        const res = await fetch('/api/system-config', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!res.ok) return;
+        const cfg = await res.json();
+
+        const isEn = i18n.getLanguage() === 'en';
+        const slaUnit = isEn ? 'h' : 'س';
+        const s = document.getElementById('transferDeptSelect');
+        if (s) s.innerHTML = cfg.departments.map(d => `<option value="${Number(d.id)}">${escapeHtml(d.name)} (SLA: ${d.sla_hours}${slaUnit})</option>`).join('');
+
+        dynamicCannedList = cfg.canned_responses || [];
+        const container = document.getElementById('cannedResponsesContainer');
+        if (dynamicCannedList.length === 0) {
+            container.innerHTML = '';
+        } else {
+            container.innerHTML = `<span class="small text-muted fw-bold me-1">${i18n.t('quick_canned_prefix')}</span>` +
+                dynamicCannedList.map((c, idx) => `<button type="button" class="btn btn-outline-secondary canned-btn" onclick="applyCanned(${idx})">${escapeHtml(c.label)}</button>`).join('');
+        }
+
+        // جلب قائمة الموظفين لخاصية الإشارة @Mention
+        const agRes = await fetch('/api/agents', { headers: { 'Authorization': `Bearer ${token}` } });
+        const agList = await agRes.json();
+        const mSelect = document.getElementById('mentionUserSelect');
+        mSelect.innerHTML = `<option value="">${i18n.t('mention_placeholder')}</option>` + agList.map(a => `<option value="${Number(a.id)}">@${escapeHtml(a.full_name)}</option>`).join('');
+    }
+
+    function applyCanned(index) {
+        if (dynamicCannedList[index]) {
+            document.getElementById('replyContent').value = dynamicCannedList[index].content;
+        }
+    }
+
+    async function loadTicketDetails() {
+        const res = await fetch(`/api/tickets/${ticketId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!res.ok) return window.location.href = 'dashboard.html';
+        const t = await res.json();
+        currentTicket = t;
+
+        const isEn = i18n.getLanguage() === 'en';
+        document.getElementById('headerTicketId').innerText = `${isEn ? 'Ticket' : 'تيكت'} #${t.id}`;
+        document.getElementById('tTitle').innerText = t.title;
+        document.getElementById('tDescription').innerText = t.description;
+        document.getElementById('tClientAcc').innerText = t.client_account || '-';
+        document.getElementById('tClientEmail').innerText = t.client_email || '-';
+        document.getElementById('tPsp').innerText = t.psp_name || '-';
+        document.getElementById('tAmount').innerText = `${t.amount || 0} ${t.currency || 'USD'} (${t.transaction_type})`;
+        document.getElementById('tDpan').innerText = t.card_dpan || '-';
+        document.getElementById('tTransRef').innerText = t.transaction_ref || '-';
+        const slaHoursSuffix = isEn ? 'h SLA' : 'س SLA';
+        document.getElementById('tDept').innerText = t.dept_name ? `${t.dept_name} (${t.dept_sla_hours || 4}${slaHoursSuffix})` : '-';
+        document.getElementById('tCreator').innerText = t.creator_name || '-';
+        document.getElementById('tAgent').innerText = t.agent_name || i18n.t('unassigned');
+        document.getElementById('tCreated').innerText = parseUtcDate(t.created_at).toLocaleString(isEn ? 'en-US' : 'ar-EG');
+
+        const rawRef = (t.transaction_ref || '').trim();
+        const hasValidRef = rawRef.length > 3 && rawRef !== '-';
+        const ref = encodeURIComponent(rawRef);
+        const tronEl = document.getElementById('tronscanLink');
+        const bscEl = document.getElementById('bscscanLink');
+        if (tronEl && bscEl) {
+            tronEl.href = hasValidRef ? `https://tronscan.org/#/transaction/${ref}` : '#';
+            bscEl.href = hasValidRef ? `https://bscscan.com/tx/${ref}` : '#';
+            tronEl.style.display = hasValidRef ? 'inline-block' : 'none';
+            bscEl.style.display = hasValidRef ? 'inline-block' : 'none';
+        }
+
+        document.getElementById('handoverTopBadge').style.display = t.is_handover === 1 ? 'inline-block' : 'none';
+        const handoverBanner = document.getElementById('handoverAlertBanner');
+        if (handoverBanner) {
+            if (t.is_handover === 1) {
+                handoverBanner.style.display = 'block';
+                document.getElementById('handoverNoteText').innerText = t.handover_note || (isEn ? 'Follow up required in next shift' : 'يرجى المتابعة في الشفت القادم');
+            } else {
+                handoverBanner.style.display = 'none';
+            }
+        }
+
+        const canApprove = user.role === 'admin' || (user.permissions && user.permissions.can_approve);
+        document.getElementById('approvalCard').style.display = (t.status === 'pending_approval' && canApprove) ? 'block' : 'none';
+
+        const statusNames = {
+            open: i18n.t('status_open'),
+            pending_approval: i18n.t('status_pending_approval'),
+            in_progress: i18n.t('status_in_progress'),
+            pending: i18n.t('status_pending'),
+            resolved: i18n.t('status_resolved'),
+            closed: i18n.t('status_closed')
+        };
+        document.getElementById('tStatusBadge').innerText = statusNames[t.status] || t.status;
+        renderTicketSlaStatus(t);
+
+        if (t.attachment_url || t.attachment_path) {
+            document.getElementById('tAttachmentArea').style.display = 'block';
+            const rawUrl = t.attachment_url || t.attachment_path;
+            document.getElementById('tAttachmentLink').href = /^https?:\/\//i.test(rawUrl)
+                ? rawUrl
+                : `/api/attachments/${encodeURIComponent(t.attachment_path)}?token=${encodeURIComponent(token)}`;
+            document.getElementById('tAttachmentName').innerText = t.attachment_name || 'Attachment';
+        } else {
+            document.getElementById('tAttachmentArea').style.display = 'none';
+        }
+
+        const chArea = document.getElementById('linkedChildrenArea');
+        if (t.linked_children && t.linked_children.length > 0) {
+            chArea.style.display = 'block';
+            chArea.innerHTML = `<div class="small fw-bold text-primary mb-1">${i18n.t('linked_subtickets_heading')}</div>` +
+                t.linked_children.map(c => `<a href="ticket.html?id=${Number(c.id)}" class="badge bg-light text-dark border me-1">#${Number(c.id)} (${escapeHtml(c.client_account)}) - ${escapeHtml(statusNames[c.status] || c.status)}</a>`).join('');
+        } else {
+            chArea.style.display = 'none';
+        }
+
+        loadClientHistory(t.client_account);
+    }
+
+    async function loadClientHistory(account) {
+        const box = document.getElementById('clientHistoryList');
+        if (!account || account === '-') { box.innerHTML = `<span class="text-muted">${i18n.t('no_acc_number')}</span>`; return; }
+        const res = await fetch(`/api/tickets/client-history/${encodeURIComponent(account)}?exclude=${ticketId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const list = await res.json();
+        if (list.length === 0) {
+            box.innerHTML = `<span class="text-muted">${i18n.t('no_prev_tickets')}</span>`;
+        } else {
+            box.innerHTML = list.map(h => `
+                <div class="d-flex justify-content-between align-items-center border-bottom py-1">
+                    <a href="ticket.html?id=${Number(h.id)}" class="fw-bold text-decoration-none">#${Number(h.id)}: ${escapeHtml(h.transaction_type)} (${Number(h.amount || 0)} ${escapeHtml(h.currency)})</a>
+                    <span class="badge bg-secondary">${escapeHtml(h.status)}</span>
+                </div>
+            `).join('');
+        }
+    }
+
+    async function loadTimeline() {
+        const res = await fetch(`/api/tickets/${ticketId}/timeline`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const items = await res.json();
+        const container = document.getElementById('timelineContainer');
+        container.innerHTML = '';
+
+        const isEn = i18n.getLanguage() === 'en';
+        items.forEach(item => {
+            const time = parseUtcDate(item.created_at).toLocaleString(isEn ? 'en-US' : 'ar-EG');
+            const ipBadge = item.ip_address ? `<span class="text-muted ms-2" style="font-size:10px;">[IP: ${escapeHtml(item.ip_address)}]</span>` : '';
+            const safeUser = escapeHtml(item.user_name || 'System');
+            const safeContent = escapeHtml(item.content || '');
+
+            if (['status_change', 'assignment', 'creation'].includes(item.action_type)) {
+                container.innerHTML += `
+                    <div class="tl-item tl-system d-flex justify-content-between align-items-center">
+                        <div><i class="bi bi-activity text-primary me-1"></i><strong>${safeUser}:</strong> ${safeContent} ${ipBadge}</div>
+                        <small class="num-tabular">${time}</small>
+                    </div>`;
+            } else {
+                const isInternal = item.action_type === 'internal_note';
+                const rawItemAttach = item.attachment_url || item.attachment_path;
+                const itemAttachHref = rawItemAttach
+                    ? (/^https?:\/\//i.test(rawItemAttach) ? rawItemAttach : `/api/attachments/${encodeURIComponent(item.attachment_path)}?token=${encodeURIComponent(token)}`)
+                    : '';
+                const attachHtml = rawItemAttach
+                    ? `<div class="mt-2 pt-2 border-top"><a href="${itemAttachHref}" target="_blank" class="btn btn-sm btn-light border"><i class="bi bi-paperclip"></i> ${escapeHtml(item.attachment_name || 'Attachment')}</a></div>`
+                    : '';
+                const noteLabel = isEn ? 'Internal Note' : 'ملاحظة داخلية';
+                container.innerHTML += `
+                    <div class="tl-item ${isInternal ? 'tl-internal' : ''}">
+                        <div class="d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom">
+                            <div><i class="bi ${isInternal ? 'bi-shield-lock-fill text-warning' : 'bi-chat-dots-fill text-primary'} me-1"></i><strong>${safeUser}</strong> ${isInternal ? `<span class="badge bg-warning text-dark ms-1">${noteLabel}</span>` : ''} ${ipBadge}</div>
+                            <small class="text-muted num-tabular">${time}</small>
+                        </div>
+                        <div style="white-space: pre-wrap;">${safeContent}</div>
+                        ${attachHtml}
+                    </div>`;
+            }
+        });
+        container.scrollTop = container.scrollHeight;
+    }
+
+    document.getElementById('replyForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const content = document.getElementById('replyContent').value.trim();
+        const newStatus = document.getElementById('newStatus').value;
+        const actionType = document.getElementById('actionType').value;
+        const mentionUser = document.getElementById('mentionUserSelect').value;
+        const fileInput = document.getElementById('replyAttachment');
+
+        if (!content && !newStatus && !fileInput.files[0] && !replyPastedBlob) return;
+
+        const formData = new FormData();
+        formData.append('content', content);
+        formData.append('action_type', actionType);
+        formData.append('new_status', newStatus);
+        formData.append('mention_user_id', mentionUser);
+        if (replyPastedBlob) formData.append('attachment', replyPastedBlob, 'reply-screenshot.png');
+        else if (fileInput.files[0]) formData.append('attachment', fileInput.files[0]);
+
+        const res = await fetch(`/api/tickets/${ticketId}/reply`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+        if (res.ok) {
+            document.getElementById('replyForm').reset();
+            toggleReplyComposerMode();
+            replyPastedBlob = null;
+            document.getElementById('replyPasteNotice').innerText = '';
+            Swal.fire({ toast: true, position: 'top-start', icon: 'success', title: i18n.t('reply_saved_toast'), showConfirmButton: false, timer: 1400 });
+            loadTicketDetails();
+            loadTimeline();
+        }
+    });
+
+    async function assignToMe() {
+        const formData = new FormData();
+        formData.append('assigned_agent_id', user.id);
+        formData.append('new_status', 'in_progress');
+        await fetch(`/api/tickets/${ticketId}/reply`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
+        loadTicketDetails(); loadTimeline();
+    }
+
+    async function autoApproveDealing() {
+        const res = await fetch(`/api/tickets/${ticketId}/transfer`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ auto_workflow: 'dealing_to_backoffice' })
+        });
+        if (res.ok) {
+            Swal.fire({ icon: 'success', title: i18n.t('dealing_approved_auto'), timer: 1500, showConfirmButton: false });
+            loadTicketDetails(); loadTimeline();
+        }
+    }
+
+    async function transferDepartment() {
+        const targetId = document.getElementById('transferDeptSelect').value;
+        const { value: note } = await Swal.fire({ title: i18n.t('dept_transfer_note_title'), input: 'text', inputPlaceholder: i18n.t('dept_transfer_note_placeholder'), showCancelButton: true });
+        if (note === undefined) return;
+
+        await fetch(`/api/tickets/${ticketId}/transfer`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target_department_id: targetId, note })
+        });
+        loadTicketDetails(); loadTimeline();
+    }
+
+    async function toggleHandover() {
+        const newState = currentTicket.is_handover === 1 ? 0 : 1;
+        let note = '';
+        if (newState === 1) {
+            const { value } = await Swal.fire({ title: i18n.t('handover_note_title'), input: 'text', inputPlaceholder: i18n.t('handover_note_placeholder'), showCancelButton: true });
+            if (value === undefined) return;
+            note = value;
+        }
+        await fetch(`/api/tickets/${ticketId}/handover`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_handover: newState, handover_note: note })
+        });
+        loadTicketDetails(); loadTimeline();
+    }
+
+    async function submitApproval(decision) {
+        const { value: note } = await Swal.fire({ title: decision === 'approve' ? i18n.t('approval_note_title') : i18n.t('rejection_reason_title'), input: 'text', showCancelButton: true });
+        if (note === undefined) return;
+        await fetch(`/api/tickets/${ticketId}/approve`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision, note })
+        });
+        loadTicketDetails(); loadTimeline();
+    }
+
+    function copyText(id, btnEl) {
+        const text = document.getElementById(id).innerText;
+        navigator.clipboard.writeText(text);
+        if (btnEl) {
+            const origHtml = btnEl.innerHTML;
+            btnEl.innerHTML = `<i class="bi bi-check-lg text-success fw-bold"></i>`;
+            setTimeout(() => { btnEl.innerHTML = origHtml; }, 1200);
+        } else {
+            Swal.fire({ toast: true, position: 'top-start', icon: 'success', title: i18n.t('copied_to_clipboard') + text, showConfirmButton: false, timer: 1000 });
+        }
+    }
+
+    // Socket.io وكاشف التضارب الحي ومؤشر الكتابة
+    const socket = io({ auth: { token } });
+    socket.emit('register_user', user);
+    socket.emit('join_ticket_room', { ticketId, user });
+
+    socket.on('ticket_viewers_update', (viewers) => {
+        const unique = Array.from(new Map(viewers.map(v => [v.id, v])).values());
+        const banner = document.getElementById('collisionBanner');
+        document.getElementById('viewersListText').innerHTML = unique.map(v => `<span class="badge bg-dark me-1">${escapeHtml(v.full_name)}</span>`).join('');
+        banner.className = unique.length > 1
+            ? 'alert alert-warning border-warning py-2 px-3 mb-3 d-flex justify-content-between align-items-center shadow-sm'
+            : 'alert alert-info py-2 px-3 mb-3 d-flex justify-content-between align-items-center shadow-sm';
+    });
+
+    let typingTimer;
+    function notifyTyping() {
+        socket.emit('typing_in_ticket', { ticketId, user_name: user.full_name });
+    }
+
+    socket.on('user_typing', ({ user_name }) => {
+        const el = document.getElementById('typingIndicator');
+        const isEn = i18n.getLanguage() === 'en';
+        el.innerText = isEn ? `✍️ ${user_name} is typing...` : `✍️ ${user_name} يكتب رداً الآن...`;
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => { el.innerText = ''; }, 2500);
+    });
+
+    socket.on('targeted_notification', (data) => {
+        playBeep();
+        Swal.fire({
+            toast: true, position: 'bottom-start', icon: 'info',
+            title: data.title, text: data.message, showConfirmButton: true, confirmButtonText: i18n.t('view'), timer: 6000
+        }).then((r) => { if (r.isConfirmed) window.location.href = `ticket.html?id=${data.ticket_id}`; });
+    });
+
+    socket.on('ticket_updated', (d) => { if (d.ticket_id == ticketId) { loadTicketDetails(); loadTimeline(); } });
+    socket.on('config_updated', () => loadDynamicConfig());
+
+    window.addEventListener('languageChanged', () => {
+        const isEn = i18n.getLanguage() === 'en';
+        const backIcon = document.getElementById('navBackIcon');
+        if (backIcon) {
+            backIcon.className = isEn ? 'bi bi-arrow-left me-1' : 'bi bi-arrow-right me-1';
+        }
+        updateHeaderUser();
+        loadDynamicConfig();
+        if (currentTicket) {
+            loadTicketDetails();
+            loadTimeline();
+        }
+    });
+
+    setInterval(() => { if (currentTicket) renderTicketSlaStatus(currentTicket); }, 30000);
+    loadDynamicConfig();
+    loadTicketDetails();
+    loadTimeline();
+</script>
+</body>
+</html>

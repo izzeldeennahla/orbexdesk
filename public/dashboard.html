@@ -1,0 +1,2875 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <script>
+        (function() {
+            function makeFetchWritable( descriptor ) {
+                if (!descriptor || typeof descriptor !== 'object') return descriptor;
+                var d = Object.assign({}, descriptor);
+                d.configurable = true;
+                if ('get' in d || 'set' in d) {
+                    var origGet = d.get;
+                    var origSet = d.set;
+                    var currentVal;
+                    var hasVal = false;
+                    d.get = function() {
+                        if (hasVal) return currentVal;
+                        return typeof origGet === 'function' ? origGet.call(this) : currentVal;
+                    };
+                    d.set = function(fn) {
+                        currentVal = fn;
+                        hasVal = true;
+                        if (typeof origSet === 'function') {
+                            try { origSet.call(this, fn); } catch (e) {}
+                        }
+                    };
+                } else {
+                    d.writable = true;
+                }
+                return d;
+            }
+            try {
+                var origDefineProperty = Object.defineProperty;
+                Object.defineProperty = function(target, prop, descriptor) {
+                    if (prop === 'fetch' && (target === window || (typeof Window !== 'undefined' && target === Window.prototype))) {
+                        descriptor = makeFetchWritable(descriptor);
+                    }
+                    return origDefineProperty.call(Object, target, prop, descriptor);
+                };
+                if (typeof Reflect !== 'undefined' && typeof Reflect.defineProperty === 'function') {
+                    var origReflectDefine = Reflect.defineProperty;
+                    Reflect.defineProperty = function(target, prop, descriptor) {
+                        if (prop === 'fetch' && (target === window || (typeof Window !== 'undefined' && target === Window.prototype))) {
+                            descriptor = makeFetchWritable(descriptor);
+                        }
+                        return origReflectDefine.call(Reflect, target, prop, descriptor);
+                    };
+                }
+            } catch (e) {}
+            try {
+                var currentFetch = window.fetch;
+                if (typeof currentFetch === 'function') {
+                    Object.defineProperty(window, 'fetch', {
+                        configurable: true,
+                        enumerable: true,
+                        get: function() { return currentFetch; },
+                        set: function(fn) { currentFetch = fn; }
+                    });
+                }
+            } catch (e) {}
+            try {
+                if (typeof Window !== 'undefined' && Window.prototype) {
+                    var protoFetch = Window.prototype.fetch;
+                    if (typeof protoFetch === 'function') {
+                        Object.defineProperty(Window.prototype, 'fetch', {
+                            configurable: true,
+                            enumerable: true,
+                            get: function() { return protoFetch; },
+                            set: function(fn) { protoFetch = fn; }
+                        });
+                    }
+                }
+            } catch (e) {}
+            window.addEventListener('error', function(ev) {
+                if ((ev && ev.filename && String(ev.filename).indexOf('chrome-extension://') === 0) ||
+                    (ev && ev.message && String(ev.message).indexOf('Cannot set property fetch') !== -1)) {
+                    ev.stopImmediatePropagation();
+                    ev.preventDefault();
+                    return true;
+                }
+            }, true);
+        })();
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="top_bar_title">لوحة العمليات والتذاكر | OrbexDesk</title>
+    <link rel="icon" type="image/png" href="/assets/orbex-logo.png">
+    <!-- استدعاء الخط من جوجل -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link id="bootstrap-css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/i18n.js"></script>
+    <style>
+        :root {
+            --orbex-crimson: #B91C1C;
+            --orbex-crimson-hover: #991B1B;
+            --primary: #B91C1C;
+            --primary-hover: #991B1B;
+        }
+        body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; color: #1e293b; overflow-x: hidden; transition: background 0.2s, color 0.2s; }
+        .sidebar { width: 265px; background: linear-gradient(180deg, #0b1120 0%, #0f172a 100%); color: #fff; position: fixed; top: 0; right: 0; bottom: 0; padding: 20px; display: flex; flex-direction: column; z-index: 1030; border-left: 1px solid #1e293b; }
+        .sidebar-brand { font-size: 19px; font-weight: 800; color: #fff; text-decoration: none; display: flex; align-items: center; gap: 10px; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+        .nav-pills .nav-link { color: #94a3b8; font-weight: 600; padding: 11px 15px; border-radius: 10px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all 0.15s ease; }
+        .nav-pills .nav-link:hover { background-color: rgba(255,255,255,0.06); color: #f8fafc; }
+        .nav-pills .nav-link.active { background-color: #b91c1c; color: #fff; box-shadow: 0 4px 14px rgba(185, 28, 28, 0.35); }
+        .btn-primary { background-color: #b91c1c !important; border-color: #b91c1c !important; }
+        .btn-primary:hover, .btn-primary:focus { background-color: #991b1b !important; border-color: #991b1b !important; }
+        .btn-outline-primary { color: #b91c1c !important; border-color: #b91c1c !important; }
+        .btn-outline-primary:hover { background-color: #b91c1c !important; color: #fff !important; }
+        .text-primary { color: #b91c1c !important; }
+        .badge.bg-primary { background-color: #b91c1c !important; }
+        .main-content { margin-right: 265px; padding: 20px 28px; }
+        .top-bar { background: #fff; padding: 14px 22px; border-radius: 14px; box-shadow: 0 1px 3px rgba(15,23,42,0.04); display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border: 1px solid #e2e8f0; flex-wrap: wrap; gap: 12px; }
+        
+        /* Interactive Clickable KPI Cards */
+        .kpi-card { background: #fff; border-radius: 14px; padding: 18px 20px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: all 0.18s ease; position: relative; user-select: none; }
+        .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px -6px rgba(15, 23, 42, 0.08); border-color: #94a3b8; }
+        .kpi-card.kpi-active { border-color: #b91c1c; box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.18); background: #f8fafc; }
+        body.dark-mode .kpi-card.kpi-active { background: #0f172a !important; border-color: #b91c1c !important; }
+        .kpi-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+        
+        .workspace-card { background: #fff; border-radius: 14px; border: 1px solid #e2e8f0; padding: 20px; box-shadow: 0 1px 3px rgba(15,23,42,0.03); }
+        
+        /* Sticky Table Header & Refined Rows */
+        .table-sticky-wrap { max-height: 640px; overflow-y: auto; border-radius: 10px; border: 1px solid #e2e8f0; }
+        body.dark-mode .table-sticky-wrap { border-color: #334155; }
+        .table { margin-bottom: 0; }
+        .table thead th { position: sticky; top: 0; z-index: 10; background-color: #f8fafc; color: #475569; font-weight: 700; font-size: 12px; border-bottom: 2px solid #e2e8f0; padding: 13px 10px; white-space: nowrap; box-shadow: 0 1px 0 #e2e8f0; }
+        .table tbody td { padding: 12px 10px; vertical-align: middle; font-size: 13px; border-color: #f1f5f9; }
+        .table tbody tr { transition: background-color 0.12s ease; }
+        .table tbody tr.row-urgent { background-color: rgba(254, 226, 226, 0.28); }
+        body.dark-mode .table tbody tr.row-urgent { background-color: rgba(127, 29, 29, 0.18); }
+        
+        .status-badge { padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; }
+        .st-open { background: #fef3c7; color: #b45309; }
+        .st-in_progress { background: #e0f2fe; color: #0369a1; }
+        .st-pending { background: #f3e8ff; color: #7e22ce; }
+        .st-pending_approval { background: #ffe4e6; color: #be123c; border: 1px solid #fda4af; }
+        .st-resolved { background: #dcfce7; color: #15803d; }
+        .st-closed { background: #f1f5f9; color: #475569; }
+
+        .section-title { font-size: 13px; font-weight: 800; color: #0f172a; background: #f8fafc; padding: 9px 14px; border-radius: 8px; margin-bottom: 12px; border-right: 3px solid #b91c1c; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; border-left: 1px solid #e2e8f0; }
+        body.dark-mode .section-title { background: #0f172a; color: #f8fafc; border-color: #334155; border-right-color: #b91c1c; }
+        .paste-zone { border: 2px dashed #cbd5e1; border-radius: 10px; padding: 12px; text-align: center; background: #f8fafc; cursor: pointer; transition: 0.2s; }
+        .paste-zone:hover { border-color: #b91c1c; background: #fef2f2; }
+        .online-dot { width: 9px; height: 9px; background-color: #22c55e; border-radius: 50%; display: inline-block; margin-left: 5px; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2); }
+        .bulk-bar { background: #0f172a; color: #fff; padding: 12px 20px; border-radius: 10px; margin-bottom: 15px; display: none; align-items: center; justify-content: space-between; box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.25); }
+
+        /* أزرار الحالات السريعة (Status Pills) */
+        .status-pill-btn {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 6px 14px;
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #475569;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+        .status-pill-btn:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+            color: #0f172a;
+        }
+        .status-pill-btn.active {
+            background: #0f172a;
+            border-color: #0f172a;
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+        }
+        .status-pill-btn.active .badge {
+            background: rgba(255, 255, 255, 0.2) !important;
+            color: #ffffff !important;
+        }
+        body.dark-mode .status-pill-btn {
+            background: #1e293b;
+            border-color: #334155;
+            color: #94a3b8;
+        }
+        body.dark-mode .status-pill-btn:hover {
+            background: #334155;
+            color: #f8fafc;
+        }
+        body.dark-mode .status-pill-btn.active {
+            background: #b91c1c;
+            border-color: #b91c1c;
+            color: #ffffff;
+        }
+
+        /* زر الملف الشخصي والتفضيلات الموحد بالشريط العلوي */
+        .user-quick-profile-btn {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 5px 12px 5px 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .user-quick-profile-btn:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+        }
+        body.dark-mode .user-quick-profile-btn {
+            background: #1e293b;
+            border-color: #334155;
+            color: #f8fafc;
+        }
+
+        /* نافذة فتح التيكت بنظام العمودين المتوازيين (Two Columns) */
+        .modal-form-col-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 18px 20px;
+            height: 100%;
+        }
+        body.dark-mode .modal-form-col-card {
+            background: #0f172a;
+            border-color: #334155;
+        }
+        .modal-col-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+            padding-bottom: 8px;
+            border-bottom: 1.5px solid #e2e8f0;
+        }
+        body.dark-mode .modal-col-title {
+            color: #f8fafc;
+            border-bottom-color: #334155;
+        }
+
+        /* لوحة السحب والإفلات (Kanban Board) */
+        .kanban-col { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; min-height: 480px; }
+        .kanban-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 10px; cursor: grab; box-shadow: 0 1px 3px rgba(0,0,0,0.02); transition: all 0.15s ease; }
+        .kanban-card:hover { transform: translateY(-2px); border-color: #2563eb; box-shadow: 0 6px 14px rgba(37, 99, 235, 0.08); }
+
+        /* Toolbar Divider */
+        .toolbar-divider { width: 1px; height: 24px; background: #e2e8f0; margin: 0 4px; }
+        body.dark-mode .toolbar-divider { background: #334155; }
+
+        /* الوضع الليلي (Dark Mode) */
+        body.dark-mode { background-color: #0b1120; color: #e2e8f0; }
+        body.dark-mode .top-bar, body.dark-mode .kpi-card, body.dark-mode .workspace-card, body.dark-mode .modal-content, body.dark-mode .kanban-card { background-color: #1e293b; color: #f8fafc; border-color: #334155; }
+        body.dark-mode .kanban-col { background-color: #0f172a; border-color: #334155; }
+        body.dark-mode .table { color: #e2e8f0; }
+        body.dark-mode .table thead th { background-color: #0f172a; color: #94a3b8; border-color: #334155; box-shadow: 0 1px 0 #334155; }
+        body.dark-mode .table tbody td { border-color: #334155; color: #e2e8f0; }
+        body.dark-mode .text-dark { color: #f8fafc !important; }
+        body.dark-mode .form-control, body.dark-mode .form-select { background-color: #0f172a; border-color: #334155; color: #f8fafc; }
+        body.dark-mode .paste-zone { background-color: #0f172a; border-color: #475569; }
+
+        /* تصميم لوحة التحليلات التنفيذية (Enterprise Executive Analytics) */
+        .analytics-filter-bar {
+            background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
+            border: 1px solid #dbeafe;
+            border-radius: 14px;
+            padding: 16px 20px;
+        }
+        body.dark-mode .analytics-filter-bar {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            border-color: #334155;
+        }
+        .analytics-insight-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 16px 18px;
+            height: 100%;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .analytics-insight-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px -4px rgba(15, 23, 42, 0.08);
+            border-color: #cbd5e1;
+        }
+        body.dark-mode .analytics-insight-card {
+            background: #0f172a;
+            border-color: #334155;
+        }
+        .analytics-chart-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 20px;
+            height: 100%;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .analytics-chart-card:hover {
+            border-color: #bfdbfe;
+            box-shadow: 0 10px 24px -6px rgba(37, 99, 235, 0.08);
+        }
+        body.dark-mode .analytics-chart-card {
+            background: #0f172a;
+            border-color: #334155;
+        }
+        .doughnut-center-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            pointer-events: none;
+        }
+        .agent-avatar-circle {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 14px;
+            color: #fff;
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            flex-shrink: 0;
+        }
+        .leaderboard-row {
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+        .leaderboard-row.active-agent-row {
+            background-color: rgba(37, 99, 235, 0.08) !important;
+        }
+        body.dark-mode .leaderboard-row.active-agent-row {
+            background-color: rgba(59, 130, 246, 0.18) !important;
+        }
+        .rank-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 34px;
+            height: 28px;
+            border-radius: 8px;
+            font-weight: 800;
+            font-size: 13px;
+        }
+        .rank-1 { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+        .rank-2 { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+        .rank-3 { background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; }
+        .rank-default { background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; }
+        body.dark-mode .rank-default { background: #1e293b; color: #94a3b8; border-color: #334155; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <a href="dashboard.html" class="sidebar-brand text-decoration-none">
+        <div style="width: 36px; height: 36px; background: #fff; border-radius: 10px; padding: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 10px rgba(237,28,36,0.25);">
+            <img src="/assets/orbex-logo.png" alt="OrbexDesk" style="width: 100%; height: 100%; object-fit: contain;">
+        </div>
+        <div class="d-flex flex-column" style="line-height: 1.1;">
+            <span style="font-size: 19px; font-weight: 900; color: #fff; letter-spacing: -0.5px;">Orbex<span style="color: #b91c1c;">Desk</span></span>
+            <span style="font-size: 10px; color: #94a3b8; font-weight: 600;">نظام العمليات الداخلي</span>
+        </div>
+    </a>
+    
+    <ul class="nav nav-pills flex-column mt-4 mb-auto">
+        <li class="nav-item">
+            <a class="nav-link active" id="tabAll" onclick="switchView('all')"><i class="bi bi-table"></i> <span data-i18n="tab_all_tickets">جدول التذاكر الشامل</span></a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="tabKanban" onclick="switchView('kanban')"><i class="bi bi-kanban-fill"></i> <span data-i18n="tab_kanban">لوحة السحب (Kanban)</span></a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link d-flex justify-content-between" id="tabHandover" onclick="switchView('handover')">
+                <span><i class="bi bi-arrow-left-right me-2"></i> <span data-i18n="tab_handover">تسليم الشفتات</span></span>
+                <span class="badge bg-warning text-dark" id="badgeHandover">0</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link d-flex justify-content-between" id="tabApproval" onclick="switchView('approval')">
+                <span><i class="bi bi-shield-check me-2"></i> <span data-i18n="tab_approval">بانتظار الاعتماد</span></span>
+                <span class="badge bg-danger" id="badgeApproval">0</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="tabAnalytics" onclick="switchView('analytics')"><i class="bi bi-bar-chart-line-fill"></i> <span data-i18n="tab_analytics">التحليلات وكفاءة الفريق</span></a>
+        </li>
+        <li class="nav-item" id="adminNavItem" style="display: none;">
+            <a href="admin.html" class="nav-link"><i class="bi bi-sliders"></i> <span data-i18n="tab_admin">إدارة النظام الشاملة</span></a>
+        </li>
+    </ul>
+
+    <div class="bg-dark bg-opacity-50 p-2 rounded-3 mb-3 small">
+        <div class="text-white-50 fw-bold mb-1"><span class="online-dot"></span> <span data-i18n="online_now">المتصلون الآن</span> (<span id="onlineCount">1</span>):</div>
+        <div id="onlineUsersList" class="text-white" style="max-height: 70px; overflow-y: auto; font-size: 12px;"></div>
+    </div>
+
+    <div class="border-top border-secondary pt-3">
+        <div class="fw-bold text-white mb-1" id="sidebarUserName">...</div>
+        <div class="badge bg-secondary mb-2" id="sidebarUserRole">...</div>
+        <button onclick="openChangePasswordModal(false)" class="btn btn-outline-light btn-sm w-100 fw-bold mb-2"><i class="bi bi-key-fill me-1"></i> <span data-i18n="btn_change_password_sidebar">تغيير كلمة المرور</span></button>
+        <button onclick="logout()" class="btn btn-outline-danger btn-sm w-100 fw-bold"><i class="bi bi-box-arrow-right me-1"></i> <span data-i18n="logout">خروج</span></button>
+    </div>
+</div>
+
+<div class="main-content">
+    <!-- شريط التنبيهات العام لبوابات الدفع والأعطال (Outage Banner) -->
+    <div id="outageBanner" class="alert fw-bold d-flex align-items-center justify-content-between shadow-sm mb-3" style="display: none !important; border-radius: 12px;">
+        <div><i class="bi bi-megaphone-fill me-2 fs-5 align-middle"></i> <span id="outageBannerText"></span></div>
+        <span class="badge bg-dark" data-i18n="outage_official_notice">تعميم إداري</span>
+    </div>
+
+    <div class="top-bar">
+        <div class="d-flex align-items-center gap-3">
+            <button type="button" class="btn btn-light border" onclick="toggleSidebar()" title="طي / توسيع القائمة الجانبية" data-i18n-title="toggle_sidebar_tooltip">
+                <i class="bi bi-layout-sidebar-inset-reverse fs-5 text-secondary"></i>
+            </button>
+            <div>
+                <h5 class="fw-bold mb-0" data-i18n="top_bar_title">مركز العمليات المالية وإدارة التذاكر</h5>
+                <small class="text-muted" data-i18n="quick_shortcut">اختصار سريع: اضغط <kbd>Alt + N</kbd> لفتح تيكت جديد فوراً</small>
+            </div>
+        </div>
+        <div class="d-flex gap-2.5 align-items-center flex-wrap">
+            <!-- 1. قائمة التصدير الموحدة (Excel + CSV) -->
+            <div class="dropdown">
+                <button class="btn btn-light border fw-bold d-inline-flex align-items-center gap-1.5 px-3" data-bs-toggle="dropdown" title="تصدير بيانات التذاكر">
+                    <i class="bi bi-download text-secondary"></i>
+                    <span>تصدير</span>
+                    <i class="bi bi-chevron-down small text-muted"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm border p-1" style="min-width: 170px;">
+                    <li>
+                        <button class="dropdown-item fw-semibold d-flex align-items-center gap-2 py-2" onclick="exportToCSV()">
+                            <i class="bi bi-file-earmark-excel text-success fs-5"></i>
+                            <span>تصدير Excel</span>
+                        </button>
+                    </li>
+                    <li>
+                        <button class="dropdown-item fw-semibold d-flex align-items-center gap-2 py-2" data-bs-toggle="modal" data-bs-target="#csvModal">
+                            <i class="bi bi-cloud-upload text-primary fs-5"></i>
+                            <span>استيراد ملف CSV</span>
+                        </button>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- 2. جرس الإشعارات المؤسسي -->
+            <div class="dropdown">
+                <button class="btn btn-light border position-relative" data-bs-toggle="dropdown" title="الإشعارات والتنبيهات">
+                    <i class="bi bi-bell text-secondary fs-5 align-middle"></i>
+                    <span id="notifBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger num-tabular" style="display: none;">0</span>
+                </button>
+                <div class="dropdown-menu dropdown-menu-end shadow-lg border-0 p-2" style="width: 350px; max-height: 420px; overflow-y: auto;">
+                    <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2 px-2">
+                        <span class="fw-bold small text-secondary" data-i18n="notifications_title"><i class="bi bi-bell-fill me-1 text-danger"></i> إشعارات القسم والمهام</span>
+                        <div>
+                            <button class="btn btn-sm btn-link text-decoration-none p-0 small me-2" onclick="enableDesktopNotif()" data-i18n="enable_desktop_notif">تفعيل الويندوز</button>
+                            <button class="btn btn-sm btn-outline-danger p-1" onclick="clearAllNotifications()" title="قراءة وحذف كل الإشعارات" data-i18n-title="clear_all_notifs"><i class="bi bi-trash3-fill"></i></button>
+                        </div>
+                    </div>
+                    <div id="notifList"><div class="text-center text-muted small py-3" data-i18n="no_notifs">لا توجد إشعارات حالياً</div></div>
+                </div>
+            </div>
+
+            <!-- 3. زر فتح تيكت جديد الرئيسي -->
+            <button class="btn btn-primary fw-bold px-3.5 shadow-sm d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#ticketModal">
+                <i class="bi bi-plus-lg"></i>
+                <span data-i18n="btn_new_ticket">فتح تيكت جديد</span>
+                <kbd class="bg-black bg-opacity-25 text-white border-0 py-0.5 px-1.5 small fw-normal">Alt+N</kbd>
+            </button>
+
+            <div class="toolbar-divider d-none d-md-block"></div>
+
+            <!-- 4. قائمة الملف الشخصي وتفضيلات المظهر الموحدة (User Profile & Preferences) -->
+            <div class="dropdown">
+                <button class="user-quick-profile-btn" data-bs-toggle="dropdown" id="userQuickMenuBtn">
+                    <div class="rounded-circle bg-danger bg-opacity-10 text-danger fw-bold d-inline-flex align-items-center justify-content-center" style="width: 30px; height: 30px; font-size: 13px;" id="topUserAvatar">
+                        <i class="bi bi-person-fill"></i>
+                    </div>
+                    <div class="d-none d-sm-flex flex-column text-start" style="line-height: 1.15;">
+                        <span class="small fw-bold text-dark" id="topUserName">المستخدم</span>
+                        <span style="font-size: 10px;" class="text-muted" id="topUserRole">موظف</span>
+                    </div>
+                    <i class="bi bi-chevron-down small text-muted ms-1"></i>
+                </button>
+                <div class="dropdown-menu dropdown-menu-end shadow-lg border p-2" style="width: 250px;">
+                    <div class="px-2 py-1.5 border-bottom mb-2">
+                        <div class="fw-bold text-dark small" id="menuUserFullName">...</div>
+                        <div class="text-muted" style="font-size: 11px;" id="menuUserDept">...</div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center px-2 py-1.5">
+                        <span class="small fw-semibold text-secondary"><i class="bi bi-translate text-danger me-1"></i> اللغة</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary py-0.5 px-2" id="langToggleBtn" onclick="i18n.toggleLanguage()">
+                            <span class="small lang-btn-label" id="currentLangLabel">English</span>
+                        </button>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center px-2 py-1.5">
+                        <span class="small fw-semibold text-secondary"><i class="bi bi-moon-stars text-danger me-1"></i> الوضع الليلي</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary py-0.5 px-2" id="darkModeBtn" onclick="toggleDarkMode()">
+                            <i class="bi bi-moon-stars-fill"></i>
+                        </button>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center px-2 py-1.5">
+                        <span class="small fw-semibold text-secondary"><i class="bi bi-volume-up text-danger me-1"></i> صوت التنبيه</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary py-0.5 px-2" id="soundBtn" onclick="toggleSound()">
+                            <i class="bi bi-volume-up-fill text-success"></i>
+                        </button>
+                    </div>
+                    <div class="px-2 py-1.5">
+                        <a href="javascript:void(0)" class="small text-secondary text-decoration-none d-flex align-items-center gap-1.5" onclick="showShortcutsGuide()">
+                            <i class="bi bi-keyboard text-danger"></i>
+                            <span>دليل الاختصارات</span>
+                        </a>
+                    </div>
+                    <div class="dropdown-divider my-1"></div>
+                    <a href="javascript:void(0)" class="dropdown-item small text-secondary py-1.5 rounded-2 d-flex align-items-center gap-2" onclick="openChangePasswordModal(false)">
+                        <i class="bi bi-key-fill text-muted"></i>
+                        <span>تغيير كلمة المرور</span>
+                    </a>
+                    <a href="javascript:void(0)" class="dropdown-item small text-danger py-1.5 rounded-2 d-flex align-items-center gap-2 fw-semibold" onclick="logout()">
+                        <i class="bi bi-box-arrow-right"></i>
+                        <span>تسجيل الخروج</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- كروت الإحصائيات التفاعلية (Clickable KPI Filter Cards) -->
+    <div class="row g-3 mb-4" id="kpiSection">
+        <div class="col-md-3">
+            <div class="kpi-card kpi-active" id="kpiCardAll" onclick="filterByKpi('all')" data-i18n-title="kpi_click_hint_all">
+                <div>
+                    <div class="text-muted small fw-bold" data-i18n="kpi_total_title">إجمالي التذاكر</div>
+                    <h3 class="fw-bold mb-0 num-tabular mt-1" id="kpiTotal">0</h3>
+                </div>
+                <div class="kpi-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-layers"></i></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card" id="kpiCardOpen" onclick="filterByKpi('open')" data-i18n-title="kpi_click_hint_open">
+                <div>
+                    <div class="text-muted small fw-bold" data-i18n="kpi_open_title">مفتوح / بانتظار الاعتماد</div>
+                    <h3 class="fw-bold mb-0 text-warning num-tabular mt-1" id="kpiOpen">0</h3>
+                </div>
+                <div class="kpi-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-hourglass-split"></i></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card" id="kpiCardProgress" onclick="filterByKpi('progress')" data-i18n-title="kpi_click_hint_progress">
+                <div>
+                    <div class="text-muted small fw-bold" data-i18n="kpi_progress_title">قيد المعالجة / تسليم شفت</div>
+                    <h3 class="fw-bold mb-0 text-info num-tabular mt-1" id="kpiProgress">0</h3>
+                </div>
+                <div class="kpi-icon bg-info bg-opacity-10 text-info"><i class="bi bi-cpu"></i></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card" id="kpiCardResolved" onclick="filterByKpi('resolved')" data-i18n-title="kpi_click_hint_resolved">
+                <div>
+                    <div class="text-muted small fw-bold" data-i18n="kpi_resolved_title">تم الحل والإنجاز</div>
+                    <h3 class="fw-bold mb-0 text-success num-tabular mt-1" id="kpiResolved">0</h3>
+                </div>
+                <div class="kpi-icon bg-success bg-opacity-10 text-success"><i class="bi bi-check2-all"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- لوحة السحب والإفلات المرئية (Kanban View) -->
+    <div class="workspace-card mb-4" id="kanbanSection" style="display: none;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0"><i class="bi bi-kanban text-primary me-2"></i><span data-i18n="tab_kanban">لوحة المهام التفاعلية</span></h5>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-3">
+                <div class="kanban-col" ondragover="allowDrop(event)" ondrop="dropTicket(event, 'open')">
+                    <h6 class="fw-bold text-warning border-bottom pb-2 mb-3" data-i18n="kanban_open_col"><i class="bi bi-inbox-fill me-1"></i> تذاكر جديدة ومفتوحة</h6>
+                    <div id="kanban_open"></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="kanban-col" ondragover="allowDrop(event)" ondrop="dropTicket(event, 'in_progress')">
+                    <h6 class="fw-bold text-info border-bottom pb-2 mb-3" data-i18n="kanban_progress_col"><i class="bi bi-lightning-charge-fill me-1"></i> قيد المعالجة (In Progress)</h6>
+                    <div id="kanban_in_progress"></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="kanban-col" ondragover="allowDrop(event)" ondrop="dropTicket(event, 'pending')">
+                    <h6 class="fw-bold text-secondary border-bottom pb-2 mb-3" data-i18n="kanban_pending_col"><i class="bi bi-pause-circle-fill me-1"></i> بانتظار العميل (Pending)</h6>
+                    <div id="kanban_pending"></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="kanban-col" ondragover="allowDrop(event)" ondrop="dropTicket(event, 'resolved')">
+                    <h6 class="fw-bold text-success border-bottom pb-2 mb-3" data-i18n="kanban_resolved_col"><i class="bi bi-check-circle-fill me-1"></i> تم الحل (Resolved)</h6>
+                    <div id="kanban_resolved"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- قسم الرسوم البيانية وتقرير كفاءة الموظفين (Advanced Analytics & Agent KPIs) -->
+    <div class="workspace-card mb-4" id="analyticsSection" style="display: none;">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+            <div>
+                <h5 class="fw-bold mb-1"><i class="bi bi-pie-chart-fill text-primary me-2"></i><span data-i18n="tab_analytics">التحليلات وكفاءة الفريق</span></h5>
+                <small class="text-muted" data-i18n="analytics_subtitle">مؤشرات الأداء اللحظية، كفاءة الاستجابة، وتحليل ضغط العمل المالي</small>
+            </div>
+            <div id="analyticsActiveFiltersWrap" class="d-flex flex-wrap gap-2 align-items-center"></div>
+        </div>
+
+        <!-- شريط فلاتر التحليلات المتقدم (القسم + اسم الموظف + نطاق الـ KPI) -->
+        <div class="analytics-filter-bar mb-4">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-secondary mb-1"><i class="bi bi-building me-1 text-primary"></i> <span data-i18n="analytics_filter_dept_lbl">فلتر القسم</span></label>
+                    <select id="analyticsFilterDept" class="form-select form-select-sm fw-semibold" onchange="onAnalyticsFilterChange('dept')"></select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-secondary mb-1"><i class="bi bi-person-badge me-1 text-primary"></i> <span data-i18n="analytics_filter_agent_lbl">فلتر اسم الموظف</span></label>
+                    <select id="analyticsFilterAgent" class="form-select form-select-sm fw-semibold" onchange="onAnalyticsFilterChange('agent')"></select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold text-secondary mb-1"><i class="bi bi-funnel-fill me-1 text-primary"></i> <span data-i18n="analytics_filter_kpi_lbl">نطاق الحالة (KPI)</span></label>
+                    <select id="analyticsFilterKpi" class="form-select form-select-sm fw-semibold" onchange="onAnalyticsFilterChange('kpi')">
+                        <option value="all" data-i18n="analytics_kpi_all">كل التذاكر (إجمالي)</option>
+                        <option value="open" data-i18n="analytics_kpi_open">التذاكر المفتوحة وبانتظار الاعتماد</option>
+                        <option value="progress" data-i18n="analytics_kpi_progress">التذاكر قيد المعالجة</option>
+                        <option value="resolved" data-i18n="analytics_kpi_resolved">التذاكر المنجزة والمغلقة</option>
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary w-100 fw-bold" onclick="resetAnalyticsFilters()" title="إعادة ضبط جميع الفلاتر" data-i18n-title="btn_reset_all_filters">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- بطاقات المؤشرات التنفيذية السريعة داخل لوحة التحليلات (4 Executive Insight Cards) -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-3 col-sm-6">
+                <div class="analytics-insight-card">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="small fw-bold text-muted" data-i18n="analytics_ins_sla_title">معدل الامتثال للـ SLA</span>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-shield-check"></i> SLA</span>
+                    </div>
+                    <div class="d-flex align-items-baseline justify-content-between">
+                        <h3 class="fw-bold mb-0 num-tabular text-success" id="insSlaRate">100%</h3>
+                        <small class="text-muted num-tabular" id="insSlaCounts">0 / 0</small>
+                    </div>
+                    <div class="progress mt-2" style="height: 6px; border-radius: 99px;">
+                        <div class="progress-bar bg-success" id="insSlaBar" style="width: 100%"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="analytics-insight-card">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="small fw-bold text-muted" data-i18n="analytics_ins_mttr_title">متوسط سرعة الحل (MTTR)</span>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-stopwatch"></i> MTTR</span>
+                    </div>
+                    <div class="d-flex align-items-baseline justify-content-between">
+                        <h3 class="fw-bold mb-0 num-tabular text-primary" id="insMttrVal">-</h3>
+                        <small class="text-muted num-tabular" id="insResolvedCount">0</small>
+                    </div>
+                    <div class="small text-muted mt-2" id="insMttrHint">-</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="analytics-insight-card">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="small fw-bold text-muted" data-i18n="analytics_ins_vol_title">الحجم المالي للتذاكر</span>
+                        <span class="badge bg-info-subtle text-info border border-info-subtle"><i class="bi bi-cash-stack"></i> USD</span>
+                    </div>
+                    <div class="d-flex align-items-baseline justify-content-between">
+                        <h3 class="fw-bold mb-0 num-tabular" id="insTotalVol">$0</h3>
+                        <small class="badge bg-light text-dark border num-tabular" id="insFilteredCountBadge">0</small>
+                    </div>
+                    <div class="small text-muted mt-2" id="insTopPspHint">-</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="analytics-insight-card">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="small fw-bold text-muted" data-i18n="analytics_ins_esc_title">التصعيدات وتسليم الشفت</span>
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-lightning-charge-fill"></i> Alert</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-3 mt-1">
+                        <div>
+                            <div class="fs-4 fw-bold text-danger num-tabular" id="insEscCount">0</div>
+                            <div class="small text-muted" data-i18n="analytics_esc_short">تصعيد SLA</div>
+                        </div>
+                        <div class="vr"></div>
+                        <div>
+                            <div class="fs-4 fw-bold text-warning num-tabular" id="insHandoverCount">0</div>
+                            <div class="small text-muted" data-i18n="analytics_handover_short">تسليم شفت</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- الرسوم البيانية الاحترافية (Charts Grid) -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-4">
+                <div class="analytics-chart-card d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <h6 class="fw-bold mb-0" data-i18n="chart_sla_compliance">نسبة الالتزام بالـ SLA</h6>
+                            <span class="badge bg-light text-secondary border num-tabular" id="slaChartTotalBadge">0</span>
+                        </div>
+                        <p class="text-muted small mb-3" data-i18n="chart_sla_met">التذاكر المنجزة ضمن الوقت vs المتأخرة</p>
+                    </div>
+                    <div class="position-relative my-auto" style="height: 215px; display: flex; justify-content: center;">
+                        <canvas id="slaChart"></canvas>
+                        <div class="doughnut-center-overlay">
+                            <div class="fs-4 fw-bold num-tabular" id="slaCenterPercent">100%</div>
+                            <div class="small text-muted" style="font-size: 11px;">SLA Health</div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-around border-top pt-3 mt-3 small">
+                        <div class="text-center">
+                            <span class="d-inline-block rounded-circle me-1" style="width:8px;height:8px;background:#10b981;"></span>
+                            <span class="text-muted" data-i18n="chart_sla_met">ضمن المعيار (SLA Met)</span>:
+                            <strong class="num-tabular ms-1 text-success" id="slaMetFooter">0</strong>
+                        </div>
+                        <div class="text-center">
+                            <span class="d-inline-block rounded-circle me-1" style="width:8px;height:8px;background:#ef4444;"></span>
+                            <span class="text-muted" data-i18n="chart_sla_breached">متجاوز المعيار (Breached)</span>:
+                            <strong class="num-tabular ms-1 text-danger" id="slaBreachedFooter">0</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="analytics-chart-card d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <h6 class="fw-bold mb-0" data-i18n="chart_dept_dist">توزيع التذاكر حسب الأقسام</h6>
+                            <i class="bi bi-bar-chart-steps text-primary"></i>
+                        </div>
+                        <p class="text-muted small mb-3" data-i18n="analytics_chart_priority_sub">تفصيل التذاكر النشطة حسب درجة الأهمية والحالة</p>
+                    </div>
+                    <div style="height: 245px;"><canvas id="deptChart"></canvas></div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="analytics-chart-card d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <h6 class="fw-bold mb-0" data-i18n="chart_psp_dist">توزيع التذاكر حسب بوابات الدفع</h6>
+                            <i class="bi bi-credit-card-2-front text-info"></i>
+                        </div>
+                        <p class="text-muted small mb-3" data-i18n="chart_psp_dist">الحركات المالية مقسمة حسب مزود الخدمة</p>
+                    </div>
+                    <div style="height: 245px; display: flex; justify-content: center;"><canvas id="pspChart"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- شريط تحليل الأولويات والحالات التفصيلي -->
+        <div class="analytics-chart-card mb-4 py-3 px-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <h6 class="fw-bold mb-0 small"><i class="bi bi-activity text-primary me-1"></i> <span data-i18n="analytics_chart_priority_title">توزيع الحالات والأولويات الحرجة</span></h6>
+                <div id="priorityPillsContainer" class="d-flex flex-wrap gap-2"></div>
+            </div>
+            <div class="progress" style="height: 10px; border-radius: 99px;" id="priorityStackedBar"></div>
+        </div>
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center pt-2 mb-3">
+            <h5 class="fw-bold mb-0"><i class="bi bi-trophy-fill text-warning me-2"></i><span data-i18n="perf_table_title">لوحة أداء الموظفين ومتوسط سرعة الإنجاز (MTTR)</span></h5>
+            <small class="text-muted"><i class="bi bi-hand-index-thumb me-1"></i><span data-i18n="leaderboard_filter_agent_hint">اضغط لتصفية التحليلات على هذا الموظف</span></small>
+        </div>
+        <div class="table-responsive border rounded-4 overflow-hidden shadow-sm">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="py-3 text-center" style="width: 70px;" data-i18n="th_rank">الترتيب</th>
+                        <th class="py-3 px-3" data-i18n="th_agent_dept">الموظف والقسم</th>
+                        <th class="py-3 text-center" data-i18n="th_assigned">المسندة</th>
+                        <th class="py-3 text-center" data-i18n="th_in_progress">قيد العمل</th>
+                        <th class="py-3 text-center" data-i18n="th_resolved">المنجزة</th>
+                        <th class="py-3" style="width: 22%;" data-i18n="th_completion_rate">نسبة الإنجاز</th>
+                        <th class="py-3 text-center" data-i18n="th_sla_rate">الالتزام بالـ SLA</th>
+                        <th class="py-3 text-center" data-i18n="th_mttr">متوسط وقت الحل</th>
+                    </tr>
+                </thead>
+                <tbody id="agentPerformanceBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- قسم جدول التذاكر -->
+    <div class="workspace-card" id="tableSection">
+        <div class="bulk-bar flex-wrap gap-2" id="bulkToolbar">
+            <div><i class="bi bi-check2-square me-2"></i> <span data-i18n="bulk_selected_prefix">تم تحديد</span> <strong id="selectedCount">0</strong> <span data-i18n="bulk_selected_suffix">تيكت</span></div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <select id="bulkStatus" class="form-select form-select-sm" style="width: 145px;">
+                    <option value="" data-i18n="bulk_status_placeholder">-- تغيير الحالة --</option>
+                    <option value="in_progress" data-i18n="status_in_progress">قيد المعالجة</option>
+                    <option value="pending" data-i18n="status_pending">بانتظار العميل</option>
+                    <option value="resolved" data-i18n="status_resolved">تم الحل</option>
+                    <option value="closed" data-i18n="status_closed">إغلاق</option>
+                </select>
+                <button class="btn btn-sm btn-primary fw-bold" onclick="applyBulk('status')" data-i18n="bulk_apply_status">تطبيق الحالة</button>
+
+                <select id="bulkAgentSelect" class="form-select form-select-sm" style="width: 155px;">
+                    <option value="" data-i18n="bulk_assign_placeholder">-- إسناد لموظف --</option>
+                </select>
+                <button class="btn btn-sm btn-info text-white fw-bold" onclick="applyBulk('assign')" data-i18n="bulk_apply_assign">إسناد</button>
+                
+                <input type="number" id="bulkMasterId" class="form-control form-control-sm" placeholder="رقم التيكت الأم #" data-i18n-placeholder="bulk_link_master_placeholder" style="width: 135px;">
+                <button class="btn btn-sm btn-warning fw-bold" onclick="applyBulk('master')" data-i18n="bulk_apply_link">ربط بتيكت أم</button>
+                
+                <button class="btn btn-sm btn-danger fw-bold" onclick="applyBulk('delete')" title="حذف جماعي" data-i18n-title="bulk_delete"><i class="bi bi-trash"></i></button>
+            </div>
+        </div>
+
+        <!-- شريط الفلاتر والبحث الذكي العصري -->
+        <div class="workspace-filters-wrap mb-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2.5 pb-2">
+                <!-- البحث الفوري مع أيقونة وزر مسح -->
+                <div class="search-box-wrap flex-grow-1" style="max-width: 380px;">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                        <input type="text" id="searchInput" class="form-control border-start-0 ps-1" placeholder="بحث سريع: رقم، حساب، TXID، بريد، عميل..." oninput="handleSearchDebounced(this.value)">
+                        <button type="button" class="btn btn-white border border-start-0 text-muted" id="clearSearchBtn" onclick="clearSearchInput()" style="display: none;"><i class="bi bi-x-circle-fill"></i></button>
+                    </div>
+                </div>
+
+                <!-- أزرار الحالات السريعة (Status Pills) -->
+                <div class="status-pills-wrap d-flex flex-wrap gap-1.5 align-items-center" id="quickStatusPills">
+                    <button type="button" class="status-pill-btn active" id="pillAll" onclick="filterByPill('')">
+                        <span>الكل</span>
+                        <span class="badge bg-secondary bg-opacity-25 text-dark num-tabular" id="pillCountAll">0</span>
+                    </button>
+                    <button type="button" class="status-pill-btn" id="pillOpen" onclick="filterByPill('open')">
+                        <i class="bi bi-hourglass-split text-warning"></i>
+                        <span>مفتوح</span>
+                        <span class="badge bg-warning bg-opacity-25 text-warning-emphasis num-tabular" id="pillCountOpen">0</span>
+                    </button>
+                    <button type="button" class="status-pill-btn" id="pillProgress" onclick="filterByPill('in_progress')">
+                        <i class="bi bi-lightning-charge-fill text-info"></i>
+                        <span>قيد المعالجة</span>
+                        <span class="badge bg-info bg-opacity-25 text-info-emphasis num-tabular" id="pillCountProgress">0</span>
+                    </button>
+                    <button type="button" class="status-pill-btn" id="pillResolved" onclick="filterByPill('resolved')">
+                        <i class="bi bi-check2-circle text-success"></i>
+                        <span>تم الإنجاز</span>
+                        <span class="badge bg-success bg-opacity-25 text-success-emphasis num-tabular" id="pillCountResolved">0</span>
+                    </button>
+                </div>
+
+                <!-- زر الفلاتر المتقدمة وزر إعادة الضبط -->
+                <div class="d-flex align-items-center gap-1.5">
+                    <button type="button" class="btn btn-sm btn-light border fw-bold d-inline-flex align-items-center gap-1.5 px-3 py-1.5 rounded-3" data-bs-toggle="collapse" data-bs-target="#advancedFiltersPanel" title="تصفية متقدمة">
+                        <i class="bi bi-funnel text-danger"></i>
+                        <span>فلاتر متقدمة</span>
+                        <span class="badge bg-danger rounded-pill ms-1" id="activeFiltersBadge" style="display: none;">0</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-light border text-muted px-2 py-1.5 rounded-3" onclick="resetFilters()" title="إعادة ضبط الفلاتر">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- لوحة الفلاتر المتقدمة القابلة للطي -->
+            <div class="collapse pt-2" id="advancedFiltersPanel">
+                <div class="p-3 bg-light rounded-3 border">
+                    <div class="row g-2.5">
+                        <div class="col-md-3 col-sm-6">
+                            <label class="form-label small text-muted fw-bold mb-1">القسم</label>
+                            <select id="filterDept" class="form-select form-select-sm" onchange="onTableDeptOrAgentChange('dept')"></select>
+                        </div>
+                        <div class="col-md-3 col-sm-6">
+                            <label class="form-label small text-muted fw-bold mb-1">الموظف المسؤول</label>
+                            <select id="filterAgent" class="form-select form-select-sm" onchange="onTableDeptOrAgentChange('agent')"></select>
+                        </div>
+                        <div class="col-md-3 col-sm-6">
+                            <label class="form-label small text-muted fw-bold mb-1">بوابة الدفع (PSP)</label>
+                            <select id="filterPsp" class="form-select form-select-sm" onchange="currentPage = 1; renderTickets()"></select>
+                        </div>
+                        <div class="col-md-3 col-sm-6">
+                            <label class="form-label small text-muted fw-bold mb-1">مستوى الأولوية</label>
+                            <select id="filterPriority" class="form-select form-select-sm" onchange="currentPage = 1; renderTickets()">
+                                <option value="" data-i18n="filter_all_priorities">كل الأولويات</option>
+                                <option value="urgent" data-i18n="priority_urgent">عاجل جداً (Urgent)</option>
+                                <option value="high" data-i18n="priority_high">عالية</option>
+                                <option value="medium" data-i18n="priority_medium">متوسطة</option>
+                                <option value="low" data-i18n="priority_low">منخفضة</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- حقول مخفية للتوافق البرمجي -->
+            <select id="filterStatus" class="d-none" onchange="onStatusDropdownChange()">
+                <option value="">كل الحالات</option>
+                <option value="open">مفتوح</option>
+                <option value="pending_approval">بانتظار اعتماد المشرف</option>
+                <option value="in_progress">قيد المعالجة</option>
+                <option value="pending">بانتظار العميل</option>
+                <option value="resolved">تم الحل</option>
+                <option value="closed">مغلق</option>
+            </select>
+            <select id="filterTrans" class="d-none"></select>
+        </div>
+
+        <div class="table-responsive table-sticky-wrap">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
+                        <th data-i18n="th_seq">رقم</th>
+                        <th data-i18n="th_ticket_issue">العنوان / المشكلة</th>
+                        <th data-i18n="th_client_account">حساب العميل</th>
+                        <th data-i18n="th_psp_amount">بوابة الدفع والمبلغ</th>
+                        <th data-i18n="th_ref_dpan">المرجع / DPAN</th>
+                        <th data-i18n="th_dept_agent">القسم والمستلم</th>
+                        <th data-i18n="th_status">الحالة</th>
+                        <th data-i18n="th_sla">عداد الـ SLA</th>
+                        <th data-i18n="th_action">إجراء</th>
+                    </tr>
+                </thead>
+                <tbody id="ticketsTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- شريط الترقيم والصفحات (Pagination Controls - البند 15) -->
+        <div class="d-flex flex-wrap justify-content-between align-items-center pt-3 border-top mt-2 gap-2" id="paginationBar">
+            <div class="d-flex align-items-center gap-2 small text-muted">
+                <span id="paginationSummaryText"></span>
+                <select id="pageSizeSelect" class="form-select form-select-sm" style="width: auto;" onchange="changePageSize(this.value)">
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="500">500</option>
+                </select>
+            </div>
+            <div class="btn-group btn-group-sm" id="paginationButtons"></div>
+        </div>
+    </div>
+</div>
+
+<!-- نافذة فتح تيكت جديد الشاملة (تصميم عصري بنظام عمودين Two Columns) -->
+<div class="modal fade" id="ticketModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
+            <div class="modal-header bg-dark text-white py-3 px-4">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="rounded-circle bg-danger bg-opacity-25 text-danger d-inline-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                        <i class="bi bi-plus-lg fs-6 text-white"></i>
+                    </div>
+                    <div>
+                        <h6 class="modal-title fw-bold mb-0" data-i18n="modal_new_ticket_title">فتح تيكت تشغيلي / مالي جديد</h6>
+                        <small class="text-white-50" style="font-size: 11px;">توجيه آلي وحساب فوري لساعات الامتثال (SLA)</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3.5">
+                <div id="duplicateWarningBox" class="alert alert-warning border-warning mb-3 py-2 px-3 small" style="display: none;"></div>
+
+                <form id="createTicketForm">
+                    <div class="row g-3">
+                        <!-- العمود الأيمن: التوجيه والعنوان وتفاصيل المشكلة -->
+                        <div class="col-lg-6">
+                            <div class="modal-form-col-card">
+                                <div class="modal-col-title">
+                                    <i class="bi bi-diagram-3 text-danger fs-6"></i>
+                                    <span>1. التوجيه وتفاصيل المشكلة</span>
+                                </div>
+
+                                <div class="row g-2 mb-2.5">
+                                    <div class="col-md-7">
+                                        <label class="form-label fw-bold small mb-1"><span data-i18n="lbl_dept">القسم المعني</span> <span class="text-danger">*</span></label>
+                                        <select id="department_id" class="form-select form-select-sm" onchange="updateSlaPreview()" required></select>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label fw-bold small mb-1"><span data-i18n="lbl_priority">الأولوية</span> <span class="text-danger">*</span></label>
+                                        <select id="priority" class="form-select form-select-sm" onchange="updateSlaPreview()" required>
+                                            <option value="low" data-i18n="priority_low_default">منخفضة (24 ساعة)</option>
+                                            <option value="medium" selected data-i18n="priority_medium_default">متوسطة (4 ساعات)</option>
+                                            <option value="high" data-i18n="priority_high_default">عالية (ساعتان)</option>
+                                            <option value="urgent" data-i18n="priority_urgent_default">عاجل جداً (ساعة واحدة)</option>
+                                        </select>
+                                        <div id="slaPreviewHint" class="form-text text-danger fw-bold small mt-0.5" style="font-size: 11px;"></div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-2.5">
+                                    <label class="form-label fw-bold small mb-1"><span data-i18n="lbl_issue_cat">تصنيف المشكلة الرئيسي</span> <span class="text-danger">*</span></label>
+                                    <select id="issue_type" class="form-select form-select-sm" required></select>
+                                </div>
+
+                                <div class="mb-2.5">
+                                    <label class="form-label fw-bold small mb-1"><span data-i18n="lbl_ticket_title">عنوان التيكت</span> <span class="text-danger">*</span></label>
+                                    <select id="title_select" class="form-select form-select-sm" onchange="handleTitleSelection()" required></select>
+                                    <div id="manual_title_wrapper" class="mt-1.5" style="display: none;">
+                                        <input type="text" id="manual_title" class="form-control form-control-sm border-danger" placeholder="اكتب عنوان التيكت المخصص هنا..." data-i18n-placeholder="placeholder_manual_title">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="form-label fw-bold small mb-1">تفاصيل وشرح الحالة <span class="text-danger">*</span></label>
+                                    <textarea id="description" class="form-control form-control-sm" rows="5" required placeholder="اكتب الشرح التفصيلي للعملية أو المشكلة هنا... (يمكنك الضغط على Ctrl+V للصق لقطة الشاشة مباشرة)" data-i18n-placeholder="placeholder_description"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- العمود الأيسر: البيانات المالية والعميل والمرفقات -->
+                        <div class="col-lg-6">
+                            <div class="modal-form-col-card">
+                                <div class="modal-col-title">
+                                    <i class="bi bi-wallet2 text-danger fs-6"></i>
+                                    <span>2. بيانات العميل والعملية والمرفقات</span>
+                                </div>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold small mb-1" data-i18n="lbl_client_account">رقم حساب العميل (MT4/5)</label>
+                                        <input type="text" id="client_account" class="form-control form-control-sm" placeholder="مثال: 805412" data-i18n-placeholder="placeholder_client_acc" oninput="checkDuplicates()">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold small mb-1" data-i18n="lbl_client_email">بريد العميل</label>
+                                        <input type="email" id="client_email" class="form-control form-control-sm" placeholder="client@mail.com">
+                                    </div>
+                                </div>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold small mb-1" data-i18n="lbl_trans_type">نوع الحركة</label>
+                                        <select id="transaction_type" class="form-select form-select-sm"></select>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label fw-bold small mb-1" data-i18n="lbl_amount">المبلغ</label>
+                                        <input type="number" step="0.01" id="amount" class="form-control form-control-sm" placeholder="0.00">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label fw-bold small mb-1" data-i18n="lbl_currency">العملة</label>
+                                        <select id="currency" class="form-select form-select-sm"></select>
+                                    </div>
+                                </div>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold small mb-1" data-i18n="lbl_psp">بوابة الدفع (PSP)</label>
+                                        <select id="psp_name" class="form-select form-select-sm"></select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold small mb-1" data-i18n="lbl_dpan">آخر 4 أرقام / DPAN</label>
+                                        <input type="text" id="card_dpan" class="form-control form-control-sm" placeholder="مثال: 4219" data-i18n-placeholder="placeholder_dpan">
+                                    </div>
+                                </div>
+
+                                <div class="row g-2 mb-2.5">
+                                    <div class="col-md-8">
+                                        <label class="form-label fw-bold small mb-1" data-i18n="lbl_ref">الرقم المرجعي (TXID / Ref)</label>
+                                        <input type="text" id="transaction_ref" class="form-control form-control-sm" placeholder="رقم العملية أو TXID" data-i18n-placeholder="placeholder_ref" oninput="checkDuplicates()">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold small mb-1" data-i18n="lbl_master_ticket">تيكت أم (Master #)</label>
+                                        <input type="number" id="master_ticket_id" class="form-control form-control-sm" placeholder="اختياري (5)" data-i18n-placeholder="placeholder_master_ticket">
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label class="form-label fw-bold small mb-1">المرفقات والوسائط (يدعم السحب والإفلات أو Ctrl+V)</label>
+                                    <div class="paste-zone py-2.5" onclick="document.getElementById('attachment').click()">
+                                        <i class="bi bi-cloud-arrow-up fs-5 text-danger"></i>
+                                        <div class="small fw-bold text-secondary" style="font-size: 11.5px;" data-i18n="paste_zone_hint">اضغط لاختيار ملف أو اضغط (Ctrl + V) للصق صورة فوراً</div>
+                                        <input type="file" id="attachment" class="d-none" onchange="previewSelectedFile(this)">
+                                        <div id="pastePreviewName" class="small text-success fw-bold mt-1"></div>
+                                        <img id="pastePreviewImg" style="max-height: 55px; display: none; margin: 4px auto; border-radius: 6px;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light py-2 px-4 d-flex justify-content-between align-items-center">
+                <div class="small text-muted">
+                    <i class="bi bi-info-circle text-primary me-1"></i> الحقول المميزة بـ (<span class="text-danger">*</span>) إلزامية.
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-secondary btn-sm fw-bold px-3" data-bs-dismiss="modal" data-i18n="cancel">إلغاء</button>
+                    <button type="button" id="submitTicketBtn" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm" onclick="submitTicket()">
+                        <i class="bi bi-send-check me-1"></i> <span data-i18n="btn_submit_ticket">حفظ وإرسال التيكت</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+        </div>
+    </div>
+</div>
+
+<!-- نافذة استيراد CSV الجماعي -->
+<div class="modal fade" id="csvModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h6 class="modal-title fw-bold" data-i18n="modal_csv_title">استيراد تذاكر جماعي عبر ملف CSV</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted" data-i18n="csv_instructions">ارفع ملف CSV يحتوي على الأعمدة: <code>client_account,amount,currency,psp_name,transaction_ref,title</code></p>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold" data-i18n="lbl_csv_dept">توجيه التذاكر المستوردة إلى قسم:</label>
+                    <select id="csvDeptId" class="form-select"></select>
+                </div>
+                <input type="file" id="csvFileInput" accept=".csv" class="form-control">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary fw-bold w-100" onclick="processCsvImport()" data-i18n="btn_start_csv_import">بدء الاستيراد وإنشاء التذاكر</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- نافذة تغيير كلمة المرور الإجبارية والاختيارية (البند 7) -->
+<div class="modal fade" id="changePasswordModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header bg-dark text-white">
+                <h6 class="modal-title fw-bold"><i class="bi bi-shield-lock-fill text-warning me-2"></i><span data-i18n="change_pass_title">تغيير كلمة المرور</span></h6>
+                <button type="button" class="btn-close btn-close-white" id="closeChangePassModalBtn" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div id="mustChangePassBanner" class="alert alert-warning small fw-bold mb-3" style="display: none;" data-i18n="must_change_pass_alert">
+                    ⚠️ يرجى تغيير كلمة المرور الخاصة بك للمتابعة لأسباب أمنية
+                </div>
+                <form id="changePasswordForm">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold" data-i18n="current_pass_lbl">كلمة المرور الحالية</label>
+                        <input type="password" id="cpCurrentPassword" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold" data-i18n="new_pass_lbl">كلمة المرور الجديدة (8 خانات على الأقل)</label>
+                        <input type="password" id="cpNewPassword" class="form-control" minlength="8" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold" data-i18n="confirm_new_pass_lbl">تأكيد كلمة المرور الجديدة</label>
+                        <input type="password" id="cpConfirmPassword" class="form-control" minlength="8" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary fw-bold w-100 py-2" data-i18n="btn_change_pass">تحديث كلمة المرور</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- درج المعاينة السريعة الجانبي للتذكرة (Quick-Peek Slide-Over Drawer) -->
+<div class="offcanvas offcanvas-start shadow-lg border-0" tabindex="-1" id="quickPeekDrawer" style="width: 460px; max-width: 92vw; z-index: 1055;">
+    <div class="offcanvas-header bg-dark text-white py-3">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-layout-sidebar-reverse text-primary fs-5"></i>
+            <h6 class="offcanvas-title fw-bold mb-0" id="qpHeaderId" data-i18n="quick_peek_title">معاينة سريعة للتيكت</h6>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body d-flex flex-column justify-content-between p-3">
+        <div>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span id="qpStatusBadge" class="status-badge st-open">...</span>
+                <span id="qpSlaBadge" class="num-tabular"></span>
+            </div>
+            <h6 class="fw-bold mb-2" id="qpTitle">...</h6>
+            <div class="p-2 bg-light border rounded-3 small mb-3" id="qpDesc" style="max-height: 110px; overflow-y: auto; white-space: pre-wrap;"></div>
+
+            <div class="row g-2 mb-3 small">
+                <div class="col-6">
+                    <div class="text-muted" data-i18n="lbl_client_account">رقم حساب العميل</div>
+                    <div class="fw-bold num-tabular" id="qpAccount">-</div>
+                </div>
+                <div class="col-6">
+                    <div class="text-muted" data-i18n="lbl_amount">المبلغ والعملة</div>
+                    <div class="fw-bold text-success num-tabular" id="qpAmount">-</div>
+                </div>
+                <div class="col-6">
+                    <div class="text-muted" data-i18n="lbl_psp">بوابة الدفع (PSP)</div>
+                    <div class="fw-bold text-primary" id="qpPsp">-</div>
+                </div>
+                <div class="col-6">
+                    <div class="text-muted" data-i18n="lbl_assigned_agent">الموظف المستلم</div>
+                    <div class="fw-bold" id="qpAgent">-</div>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 mb-3">
+                <a id="qpOpenFullBtn" href="#" class="btn btn-primary btn-sm fw-bold flex-grow-1">
+                    <i class="bi bi-box-arrow-up-right me-1"></i> <span data-i18n="quick_peek_open_full">فتح صفحة المعالجة الكاملة</span>
+                </a>
+                <button type="button" id="qpAssignMeBtn" class="btn btn-outline-primary btn-sm fw-bold" onclick="quickPeekAssignToMe()">
+                    <i class="bi bi-hand-index-thumb me-1"></i> <span data-i18n="quick_peek_assign_me">استلام فوري</span>
+                </button>
+            </div>
+
+            <div class="border-top pt-2">
+                <div class="small fw-bold text-secondary mb-2"><i class="bi bi-clock-history me-1"></i> <span data-i18n="quick_peek_latest_activity">آخر التحديثات والملاحظات</span></div>
+                <div id="qpTimelineList" style="max-height: 220px; overflow-y: auto;"></div>
+            </div>
+        </div>
+
+        <div class="border-top pt-3 mt-2">
+            <div class="input-group input-group-sm">
+                <input type="text" id="qpQuickNoteInput" class="form-control" placeholder="أضف ملاحظة داخلية سريعة..." data-i18n-placeholder="quick_peek_quick_note_placeholder" onkeydown="if(event.key==='Enter'){event.preventDefault();sendQuickPeekNote();}">
+                <button class="btn btn-dark fw-bold" type="button" onclick="sendQuickPeekNote()">
+                    <i class="bi bi-send-fill me-1"></i> <span data-i18n="quick_peek_send_note">إرسال الملاحظة</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    let token = localStorage.getItem('token');
+    let user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (!token || !user) window.location.href = 'index.html';
+
+    function updateUserRoleDisplay() {
+        if (!user) return;
+        document.getElementById('sidebarUserName').innerText = user.full_name;
+        const isEn = i18n.getLanguage() === 'en';
+        const roleMap = {
+            admin: isEn ? 'System Admin' : 'مدير النظام العام',
+            agent: isEn ? 'Dept Agent' : 'مختص قسم',
+            employee: isEn ? 'Employee' : 'موظف عادي'
+        };
+        const roleLabel = roleMap[user.role] || user.role;
+        const deptLabel = user.dept_name || (isEn ? 'General' : 'عام');
+        document.getElementById('sidebarUserRole').innerText = `${roleLabel} (${deptLabel})`;
+
+        // تحديث عناصر الملف الشخصي بالشريط العلوي
+        const topName = document.getElementById('topUserName');
+        const topRole = document.getElementById('topUserRole');
+        const menuName = document.getElementById('menuUserFullName');
+        const menuDept = document.getElementById('menuUserDept');
+        const avatarEl = document.getElementById('topUserAvatar');
+
+        if (topName) topName.innerText = (user.full_name || user.username || '').split(' ')[0];
+        if (topRole) topRole.innerText = roleLabel;
+        if (menuName) menuName.innerText = user.full_name || user.username;
+        if (menuDept) menuDept.innerText = `${roleLabel} • ${deptLabel}`;
+        if (avatarEl && user.full_name) {
+            const initials = user.full_name.trim().split(' ').map(n => n[0]).slice(0, 2).join('');
+            avatarEl.innerText = initials || 'O';
+        }
+    }
+    updateUserRoleDisplay();
+
+    if (user.role === 'admin') document.getElementById('adminNavItem').style.display = 'block';
+    if (user.permissions && user.permissions.can_export === false && user.role !== 'admin') {
+        document.getElementById('exportBtn').style.display = 'none';
+    }
+
+    let changePassModalInstance = null;
+    function openChangePasswordModal(isMandatory = false) {
+        const modalEl = document.getElementById('changePasswordModal');
+        document.getElementById('changePasswordForm').reset();
+        document.getElementById('mustChangePassBanner').style.display = isMandatory ? 'block' : 'none';
+        document.getElementById('closeChangePassModalBtn').style.display = isMandatory ? 'none' : 'block';
+        changePassModalInstance = new bootstrap.Modal(modalEl, {
+            backdrop: isMandatory ? 'static' : true,
+            keyboard: !isMandatory
+        });
+        changePassModalInstance.show();
+    }
+
+    if (user && user.must_change_password) {
+        setTimeout(() => openChangePasswordModal(true), 300);
+    }
+
+    document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const current_password = document.getElementById('cpCurrentPassword').value;
+        const new_password = document.getElementById('cpNewPassword').value;
+        const confirm_password = document.getElementById('cpConfirmPassword').value;
+
+        if (new_password.length < 8) {
+            return Swal.fire(i18n.t('error'), i18n.t('pass_len_err'), 'warning');
+        }
+        if (new_password !== confirm_password) {
+            return Swal.fire(i18n.t('error'), i18n.t('pass_mismatch_err'), 'warning');
+        }
+
+        const res = await fetch('/api/auth/change-password', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ current_password, new_password })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            if (data.token) {
+                token = data.token;
+                localStorage.setItem('token', data.token);
+            }
+            user.must_change_password = false;
+            localStorage.setItem('user', JSON.stringify(user));
+            if (changePassModalInstance) changePassModalInstance.hide();
+            Swal.fire({ icon: 'success', title: i18n.t('pass_changed_success'), timer: 1500, showConfirmButton: false });
+        } else {
+            Swal.fire(i18n.t('error'), data.error || i18n.t('alert_unexpected_error'), 'error');
+        }
+    });
+
+    let allTickets = [];
+    let filteredTicketsCache = [];
+    let currentView = 'all';
+    let kpiQuickFilter = 'all';
+    let currentPage = 1;
+    let pageSize = 25;
+    let soundEnabled = true;
+    let pastedBlob = null;
+    let charts = {};
+    let currentQuickPeekId = null;
+
+    if (localStorage.getItem('darkMode') === '1') {
+        document.body.classList.add('dark-mode');
+        document.getElementById('darkModeBtn').innerHTML = '<i class="bi bi-sun-fill text-warning"></i>';
+    }
+
+    function toggleDarkMode() {
+        document.body.classList.toggle('dark-mode');
+        const isDark = document.body.classList.contains('dark-mode');
+        localStorage.setItem('darkMode', isDark ? '1' : '0');
+        document.getElementById('darkModeBtn').innerHTML = isDark
+            ? '<i class="bi bi-sun-fill text-warning"></i>'
+            : '<i class="bi bi-moon-stars-fill text-dark"></i>';
+        if (currentView === 'analytics') loadAnalyticsCharts();
+    }
+
+    function toggleSidebar() {
+        if (window.innerWidth <= 992) {
+            document.body.classList.toggle('sidebar-mobile-open');
+        } else {
+            document.body.classList.toggle('sidebar-collapsed');
+        }
+    }
+
+    function showShortcutsGuide() {
+        Swal.fire({
+            title: i18n.t('shortcuts_title'),
+            html: `
+                <div class="text-start small">
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <span>${i18n.t('sc_search')}</span>
+                        <kbd class="bg-dark text-white px-2 py-1 rounded">/</kbd>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <span>${i18n.t('sc_new_ticket')}</span>
+                        <kbd class="bg-dark text-white px-2 py-1 rounded">Alt + N</kbd>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                        <span>${i18n.t('sc_send_reply')}</span>
+                        <kbd class="bg-dark text-white px-2 py-1 rounded">Ctrl + Enter</kbd>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center py-2">
+                        <span>${i18n.t('sc_close_drawer')}</span>
+                        <kbd class="bg-dark text-white px-2 py-1 rounded">Esc</kbd>
+                    </div>
+                </div>
+            `,
+            confirmButtonText: i18n.t('yes')
+        });
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.altKey && (e.key === 'n' || e.key === 'N' || e.key === 'ى')) {
+            e.preventDefault();
+            new bootstrap.Modal(document.getElementById('ticketModal')).show();
+        }
+        if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+            e.preventDefault();
+            const searchBox = document.getElementById('searchInput');
+            if (searchBox) searchBox.focus();
+        }
+    });
+
+    if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+    }
+
+    function enableDesktopNotif() {
+        if (!("Notification" in window)) return Swal.fire(i18n.t('warning'), i18n.t('no_windows_notif'), 'info');
+        Notification.requestPermission().then(perm => {
+            if (perm === 'granted') Swal.fire(i18n.t('success'), i18n.t('windows_notif_enabled'), 'success');
+        });
+    }
+
+    function playBeep() {
+        if (!soundEnabled) return;
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(660, ctx.currentTime);
+            osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
+            gain.gain.setValueAtTime(0.18, ctx.currentTime);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.3);
+        } catch (e) {}
+    }
+
+    function toggleSound() {
+        soundEnabled = !soundEnabled;
+        document.getElementById('soundBtn').innerHTML = soundEnabled
+            ? '<i class="bi bi-volume-up-fill text-success"></i>'
+            : '<i class="bi bi-volume-mute-fill text-danger"></i>';
+    }
+
+    function showDesktopNotification(title, body, ticketId) {
+        document.title = `🔔 (${ticketId}) ${title}`;
+        setTimeout(() => { document.title = i18n.t('dashboard_page_title', 'لوحة العمليات | OrbexDesk'); }, 8000);
+
+        if ("Notification" in window && Notification.permission === "granted") {
+            const notif = new Notification(title, {
+                body: body,
+                icon: 'https://cdn-icons-png.flaticon.com/512/1827/1827349.png'
+            });
+            notif.onclick = () => {
+                window.focus();
+                window.location.href = `ticket.html?id=${ticketId}`;
+            };
+        }
+    }
+
+    async function loadNotifications() {
+        const res = await fetch('/api/notifications', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!res.ok) return;
+        const list = await res.json();
+        
+        const unreadList = list.filter(n => n.is_read === 0);
+        
+        const badge = document.getElementById('notifBadge');
+        if (unreadList.length > 0) {
+            badge.innerText = unreadList.length;
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
+
+        const container = document.getElementById('notifList');
+        if (unreadList.length === 0) {
+            container.innerHTML = `<div class="text-center text-muted small py-3">${i18n.t('no_notif')}</div>`;
+            return;
+        }
+
+        const timeLocale = i18n.getLanguage() === 'en' ? 'en-US' : 'ar-EG';
+        container.innerHTML = unreadList.map(n => {
+            let icon = 'bi-bell-fill text-warning';
+            if (n.title.includes('تصعيد') || n.title.includes('Escalat')) icon = 'bi-exclamation-triangle-fill text-danger';
+            else if (n.title.includes('رد') || n.title.includes('Repl')) icon = 'bi-chat-dots-fill text-primary';
+            else if (n.title.includes('تم حل') || n.title.includes('Resolv')) icon = 'bi-check-circle-fill text-success';
+
+            return `
+            <a href="javascript:void(0)" onclick="readSingleNotification(${Number(n.id)}, ${Number(n.ticket_id)})" class="dropdown-item rounded-2 mb-2 p-2 border bg-primary bg-opacity-10 border-primary" style="white-space: normal; line-height: 1.5;">
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                    <div class="small text-primary fw-bold"><i class="bi ${icon} me-1"></i> ${escapeHtml(n.title)}</div>
+                    <div class="text-muted" style="font-size: 10px; min-width: 60px; text-align: left;" dir="ltr">${parseUtcDate(n.created_at).toLocaleTimeString(timeLocale, {hour: '2-digit', minute:'2-digit'})}</div>
+                </div>
+                <div class="small text-dark" style="padding-right: 20px;">${escapeHtml(n.message)}</div>
+            </a>
+        `;
+        }).join('');
+    }
+
+    async function readSingleNotification(notifId, ticketId) {
+        try {
+            await fetch(`/api/notifications/${notifId}/read`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+        } catch(e) {}
+        window.location.href = `ticket.html?id=${ticketId}`;
+    }
+
+    async function clearAllNotifications() {
+        await fetch('/api/notifications/mark-read', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+        document.getElementById('notifBadge').style.display = 'none';
+        document.getElementById('notifList').innerHTML = `<div class="text-center text-muted small py-3">${i18n.t('no_notif')}</div>`;
+    }
+
+    let sysConfigData = { departments: [], sla_settings: {} };
+
+    function parseUtcDate(dateStr) {
+        if (!dateStr) return new Date();
+        const s = String(dateStr).trim();
+        if (s.includes('T') || s.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(s)) return new Date(s);
+        return new Date(s.replace(' ', 'T') + 'Z');
+    }
+
+    function updateSlaPreview() {
+        const s = sysConfigData.sla_settings || {};
+        const mode = s.sla_mode || 'dept_default';
+        const deptId = Number(document.getElementById('department_id')?.value);
+        const deptObj = (sysConfigData.departments || []).find(d => d.id === deptId);
+        const deptHours = deptObj && Number(deptObj.sla_hours) > 0 ? Number(deptObj.sla_hours) : null;
+
+        const pMap = {
+            urgent: Number(s.sla_urgent_hours) || 1,
+            high: Number(s.sla_high_hours) || 2,
+            medium: Number(s.sla_medium_hours) || 4,
+            low: Number(s.sla_low_hours) || 24
+        };
+
+        const prioSelect = document.getElementById('priority');
+        if (prioSelect) {
+            const calcForPrio = (p) => {
+                if (mode === 'department_only') return deptHours || pMap[p];
+                if (mode === 'priority_only') return pMap[p];
+                if (!p || p === 'medium') return deptHours || pMap.medium;
+                return pMap[p];
+            };
+            const isEn = i18n.getLanguage() === 'en';
+            const hoursUnit = isEn ? 'hours' : 'ساعات';
+            Array.from(prioSelect.options).forEach(opt => {
+                const hrs = calcForPrio(opt.value);
+                if (opt.value === 'low') opt.text = `${i18n.t('priority_low')} (${hrs} ${hoursUnit})`;
+                if (opt.value === 'medium') opt.text = `${i18n.t('priority_medium')} (${hrs} ${hoursUnit})`;
+                if (opt.value === 'high') opt.text = `${i18n.t('priority_high')} (${hrs} ${hoursUnit})`;
+                if (opt.value === 'urgent') opt.text = `${i18n.t('priority_urgent')} (${hrs} ${hoursUnit})`;
+            });
+
+            const activeHrs = calcForPrio(prioSelect.value);
+            const hintEl = document.getElementById('slaPreviewHint');
+            if (hintEl) {
+                const targetText = isEn ? 'Target SLA Window:' : 'مهلة الـ SLA المستهدفة:';
+                hintEl.innerHTML = `<i class="bi bi-stopwatch"></i> ${targetText} <strong>${activeHrs} ${hoursUnit}</strong>` +
+                    (deptObj ? ` (${deptObj.name})` : '');
+            }
+        }
+    }
+
+    async function loadDynamicConfig() {
+        const res = await fetch('/api/system-config', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!res.ok) return;
+        const cfg = await res.json();
+        sysConfigData = cfg;
+
+        const bannerEl = document.getElementById('outageBanner');
+        if (cfg.banner && cfg.banner.active === '1' && cfg.banner.text) {
+            bannerEl.className = `alert alert-${cfg.banner.type || 'warning'} fw-bold d-flex align-items-center justify-content-between shadow-sm mb-3`;
+            bannerEl.style.display = 'flex';
+            document.getElementById('outageBannerText').innerText = cfg.banner.text;
+        } else {
+            bannerEl.style.setProperty('display', 'none', 'important');
+        }
+
+        const isEn = i18n.getLanguage() === 'en';
+        const slaSuffix = isEn ? 'h SLA' : 'س SLA';
+        const sDept = document.getElementById('department_id');
+        const sCsvDept = document.getElementById('csvDeptId');
+        const fDept = document.getElementById('filterDept');
+        const aDept = document.getElementById('analyticsFilterDept');
+        const prevDeptVal = (fDept && fDept.value) || (aDept && aDept.value) || '';
+
+        sDept.innerHTML = `<option value="">${i18n.t('opt_select_title')}</option>`;
+        sCsvDept.innerHTML = '';
+        if (fDept) fDept.innerHTML = `<option value="">${i18n.t('filter_all_depts')}</option>`;
+        if (aDept) aDept.innerHTML = `<option value="">${i18n.t('filter_all_depts')}</option>`;
+        cfg.departments.forEach(d => {
+            const safeDeptName = escapeHtml(d.name);
+            sDept.innerHTML += `<option value="${d.id}">${safeDeptName} (${d.sla_hours}${slaSuffix})</option>`;
+            sCsvDept.innerHTML += `<option value="${d.id}">${safeDeptName} (${d.sla_hours}${slaSuffix})</option>`;
+            if (fDept) fDept.innerHTML += `<option value="${d.id}">${safeDeptName}</option>`;
+            if (aDept) aDept.innerHTML += `<option value="${d.id}">${safeDeptName}</option>`;
+        });
+        if (fDept) fDept.value = prevDeptVal;
+        if (aDept) aDept.value = prevDeptVal;
+        updateSlaPreview();
+
+        // جلب قائمة الموظفين للإسناد الجماعي + فلاتر جدول التذاكر والتحليلات
+        try {
+            const agRes = await fetch('/api/agents', { headers: { 'Authorization': `Bearer ${token}` } });
+            if (agRes.ok) {
+                const agents = await agRes.json();
+                const staffList = agents.filter(a => a.role === 'agent' || a.role === 'admin');
+                const bulkAg = document.getElementById('bulkAgentSelect');
+                const fAgent = document.getElementById('filterAgent');
+                const aAgent = document.getElementById('analyticsFilterAgent');
+                const prevAgentVal = (fAgent && fAgent.value) || (aAgent && aAgent.value) || '';
+
+                if (bulkAg) {
+                    bulkAg.innerHTML = `<option value="">${i18n.t('bulk_assign_placeholder')}</option>` +
+                        staffList.map(a => `<option value="${a.id}">${escapeHtml(a.full_name)}</option>`).join('');
+                }
+                const agentFilterOptions =
+                    `<option value="">${i18n.t('filter_all_agents')}</option>` +
+                    `<option value="unassigned">${i18n.t('filter_unassigned_only')}</option>` +
+                    staffList.map(a => `<option value="${a.id}">${escapeHtml(a.full_name)}</option>`).join('');
+                if (fAgent) {
+                    fAgent.innerHTML = agentFilterOptions;
+                    fAgent.value = prevAgentVal;
+                }
+                if (aAgent) {
+                    aAgent.innerHTML = agentFilterOptions;
+                    aAgent.value = prevAgentVal;
+                }
+            }
+        } catch (e) {}
+
+        const psps = cfg.lists.filter(x => x.list_type === 'psp');
+        const trans = cfg.lists.filter(x => x.list_type === 'transaction_type');
+        const currs = cfg.lists.filter(x => x.list_type === 'currency');
+        const cats = cfg.lists.filter(x => x.list_type === 'issue_category');
+
+        document.getElementById('filterPsp').innerHTML = `<option value="">${i18n.t('filter_all_psps')}</option>` + psps.map(p => `<option value="${escapeHtml(p.value)}">${escapeHtml(p.value)}</option>`).join('');
+        document.getElementById('psp_name').innerHTML = psps.map(p => `<option value="${escapeHtml(p.value)}">${escapeHtml(p.value)}</option>`).join('');
+
+        document.getElementById('filterTrans').innerHTML = `<option value="">${i18n.t('filter_all_trans')}</option>` + trans.map(t => `<option value="${escapeHtml(t.value)}">${escapeHtml(t.value)}</option>`).join('');
+        document.getElementById('transaction_type').innerHTML = trans.map(t => `<option value="${escapeHtml(t.value)}">${escapeHtml(t.value)}</option>`).join('');
+
+        document.getElementById('currency').innerHTML = currs.map(c => `<option value="${escapeHtml(c.value)}">${escapeHtml(c.value)}</option>`).join('');
+        document.getElementById('issue_type').innerHTML = cats.map(c => `<option value="${escapeHtml(c.value)}">${escapeHtml(c.value)}</option>`).join('');
+
+        const titleSelect = document.getElementById('title_select');
+        let html = `<option value="">${i18n.t('opt_select_title')}</option>`;
+        const grouped = {};
+        cfg.issues.forEach(iss => {
+            if (!grouped[iss.category]) grouped[iss.category] = [];
+            grouped[iss.category].push(iss);
+        });
+
+        for (const [catName, items] of Object.entries(grouped)) {
+            html += `<optgroup label="${escapeHtml(catName)}">`;
+            items.forEach(i => {
+                html += `<option value="${escapeHtml(i.title)}" data-cat="${escapeHtml(i.category)}" data-trans="${escapeHtml(i.default_transaction_type)}">${escapeHtml(i.title)}</option>`;
+            });
+            html += `</optgroup>`;
+        }
+        html += `<optgroup label="${i18n.t('opt_manual_entry')}"><option value="MANUAL_ENTRY">${i18n.t('opt_manual_entry')}</option></optgroup>`;
+        titleSelect.innerHTML = html;
+    }
+
+    window.addEventListener('paste', (e) => {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (let item of items) {
+            if (item.type.indexOf('image') === 0) {
+                pastedBlob = item.getAsFile();
+                document.getElementById('pastePreviewName').innerText = i18n.t('clipboard_screenshot_captured');
+                const img = document.getElementById('pastePreviewImg');
+                img.src = URL.createObjectURL(pastedBlob);
+                img.style.display = 'block';
+            }
+        }
+    });
+
+    function previewSelectedFile(input) {
+        if (input.files[0]) {
+            pastedBlob = null;
+            document.getElementById('pastePreviewName').innerText = '📎 ' + input.files[0].name;
+            document.getElementById('pastePreviewImg').style.display = 'none';
+        }
+    }
+
+    let dupTimeout;
+    function checkDuplicates() {
+        clearTimeout(dupTimeout);
+        dupTimeout = setTimeout(async () => {
+            const acc = document.getElementById('client_account').value.trim();
+            const ref = document.getElementById('transaction_ref').value.trim();
+            const box = document.getElementById('duplicateWarningBox');
+            if (acc.length < 3 && ref.length < 4) { box.style.display = 'none'; return; }
+
+            const res = await fetch(`/api/tickets/check-duplicate?account=${encodeURIComponent(acc)}&ref=${encodeURIComponent(ref)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const dups = await res.json();
+            if (dups.length > 0) {
+                box.style.display = 'block';
+                box.innerHTML = `<strong>${i18n.t('smart_duplicate_warning')}</strong><br>` +
+                    dups.map(d => `<a href="ticket.html?id=${Number(d.id)}" target="_blank" class="fw-bold text-danger">${i18n.t('ticket_number_prefix')}${Number(d.id)}: ${escapeHtml(d.title)} (${i18n.t('ref_prefix')} ${escapeHtml(d.transaction_ref)})</a>`).join(' | ');
+            } else {
+                box.style.display = 'none';
+            }
+        }, 350);
+    }
+
+    function handleTitleSelection() {
+        const select = document.getElementById('title_select');
+        const manualWrapper = document.getElementById('manual_title_wrapper');
+        const manualInput = document.getElementById('manual_title');
+        const opt = select.options[select.selectedIndex];
+
+        if (select.value === 'MANUAL_ENTRY') {
+            manualWrapper.style.display = 'block';
+            manualInput.required = true;
+            manualInput.focus();
+        } else {
+            manualWrapper.style.display = 'none';
+            manualInput.required = false;
+            manualInput.value = '';
+            if (opt && opt.getAttribute('data-cat')) document.getElementById('issue_type').value = opt.getAttribute('data-cat');
+            if (opt && opt.getAttribute('data-trans')) document.getElementById('transaction_type').value = opt.getAttribute('data-trans');
+        }
+    }
+
+    let initialTicketsLoaded = false;
+    async function loadTickets() {
+        if (!initialTicketsLoaded) {
+            const tbody = document.getElementById('ticketsTableBody');
+            if (tbody) {
+                tbody.innerHTML = Array.from({ length: 5 }).map(() => `
+                    <tr>
+                        <td colspan="10" class="py-3"><div class="skeleton-line w-100"></div></td>
+                    </tr>
+                `).join('');
+            }
+        }
+        const res = await fetch('/api/tickets', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.status === 401 || res.status === 403) return logout();
+        allTickets = await res.json();
+        initialTicketsLoaded = true;
+        updateKPIs();
+        renderTickets();
+        if (currentView === 'kanban') renderKanbanBoard();
+        if (currentView === 'analytics') loadAnalyticsCharts();
+    }
+
+    function syncKpiActiveVisuals() {
+        document.querySelectorAll('#kpiSection .kpi-card').forEach(c => c.classList.remove('kpi-active'));
+        if (kpiQuickFilter === 'all') document.getElementById('kpiCardAll')?.classList.add('kpi-active');
+        if (kpiQuickFilter === 'open') document.getElementById('kpiCardOpen')?.classList.add('kpi-active');
+        if (kpiQuickFilter === 'progress') document.getElementById('kpiCardProgress')?.classList.add('kpi-active');
+        if (kpiQuickFilter === 'resolved') document.getElementById('kpiCardResolved')?.classList.add('kpi-active');
+
+        const analyticsKpiSel = document.getElementById('analyticsFilterKpi');
+        if (analyticsKpiSel && analyticsKpiSel.value !== kpiQuickFilter) {
+            analyticsKpiSel.value = kpiQuickFilter;
+        }
+    }
+
+    function filterByKpi(kpiType) {
+        // إذا ضغط المستخدم على نفس البطاقة المفعّلة حالياً (غير الكل)، يتم إلغاء الفلتر والعودة لعرض الكل
+        if (kpiQuickFilter === kpiType && kpiType !== 'all') {
+            kpiQuickFilter = 'all';
+        } else {
+            kpiQuickFilter = kpiType;
+        }
+        syncKpiActiveVisuals();
+
+        // تصفير فلتر القائمة المنسدلة للحالة لمنع التعارض المنطقي مع بطاقة الـ KPI
+        const statusSelect = document.getElementById('filterStatus');
+        if (statusSelect) statusSelect.value = '';
+
+        // البقاء في نفس التبويب الحالي (سواء كان في لوحة التحليلات أو Kanban أو جدول التذاكر) وتطبيق الفلتر عليه فوراً
+        if (currentView === 'analytics') {
+            loadAnalyticsCharts();
+        } else if (currentView === 'kanban') {
+            renderKanbanBoard();
+        } else {
+            currentPage = 1;
+            renderTickets();
+        }
+    }
+
+    function onTableDeptOrAgentChange(which) {
+        const fDept = document.getElementById('filterDept');
+        const aDept = document.getElementById('analyticsFilterDept');
+        const fAgent = document.getElementById('filterAgent');
+        const aAgent = document.getElementById('analyticsFilterAgent');
+
+        if (which === 'dept' && fDept && aDept) aDept.value = fDept.value;
+        if (which === 'agent' && fAgent && aAgent) aAgent.value = fAgent.value;
+
+        updateKPIs();
+        currentPage = 1;
+        renderTickets();
+        if (currentView === 'kanban') renderKanbanBoard();
+        if (currentView === 'analytics') loadAnalyticsCharts();
+    }
+
+    function onAnalyticsFilterChange(which) {
+        const fDept = document.getElementById('filterDept');
+        const aDept = document.getElementById('analyticsFilterDept');
+        const fAgent = document.getElementById('filterAgent');
+        const aAgent = document.getElementById('analyticsFilterAgent');
+        const aKpi = document.getElementById('analyticsFilterKpi');
+
+        if (which === 'dept' && aDept && fDept) fDept.value = aDept.value;
+        if (which === 'agent' && aAgent && fAgent) fAgent.value = aAgent.value;
+        if (which === 'kpi' && aKpi) {
+            kpiQuickFilter = aKpi.value || 'all';
+            syncKpiActiveVisuals();
+            const statusSelect = document.getElementById('filterStatus');
+            if (statusSelect) statusSelect.value = '';
+        }
+
+        updateKPIs();
+        loadAnalyticsCharts();
+        renderTickets();
+    }
+
+    function filterAnalyticsByAgentFromLeaderboard(agentId) {
+        const aAgent = document.getElementById('analyticsFilterAgent');
+        const fAgent = document.getElementById('filterAgent');
+        if (!aAgent) return;
+        const targetVal = String(aAgent.value) === String(agentId) ? '' : String(agentId);
+        aAgent.value = targetVal;
+        if (fAgent) fAgent.value = targetVal;
+        updateKPIs();
+        loadAnalyticsCharts();
+        renderTickets();
+    }
+
+    function resetAnalyticsFilters() {
+        const aDept = document.getElementById('analyticsFilterDept');
+        const fDept = document.getElementById('filterDept');
+        const aAgent = document.getElementById('analyticsFilterAgent');
+        const fAgent = document.getElementById('filterAgent');
+        if (aDept) aDept.value = '';
+        if (fDept) fDept.value = '';
+        if (aAgent) aAgent.value = '';
+        if (fAgent) fAgent.value = '';
+        kpiQuickFilter = 'all';
+        syncKpiActiveVisuals();
+        updateKPIs();
+        loadAnalyticsCharts();
+        renderTickets();
+    }
+
+    function onStatusDropdownChange() {
+        // عند اختيار حالة محددة من القائمة المنسدلة يدوياً، نلغي فلتر بطاقة الـ KPI لمنع تضارب الفلترين
+        const statusSelect = document.getElementById('filterStatus');
+        if (statusSelect && statusSelect.value !== '' && kpiQuickFilter !== 'all') {
+            kpiQuickFilter = 'all';
+            syncKpiActiveVisuals();
+        }
+        currentPage = 1;
+        renderTickets();
+    }
+
+    function updateKPIs() {
+        const deptFilter = (document.getElementById('filterDept')?.value) || (document.getElementById('analyticsFilterDept')?.value) || '';
+        const agentFilter = (document.getElementById('filterAgent')?.value) || (document.getElementById('analyticsFilterAgent')?.value) || '';
+
+        const scopedTickets = allTickets.filter(t => {
+            const matchDept = !deptFilter || String(t.department_id) === String(deptFilter);
+            const matchAgent = !agentFilter || (agentFilter === 'unassigned' ? !t.assigned_agent_id : String(t.assigned_agent_id) === String(agentFilter));
+            return matchDept && matchAgent;
+        });
+
+        document.getElementById('kpiTotal').innerText = scopedTickets.length;
+        document.getElementById('kpiOpen').innerText = scopedTickets.filter(t => t.status === 'open' || t.status === 'pending_approval').length;
+        document.getElementById('kpiProgress').innerText = scopedTickets.filter(t => t.status === 'in_progress' || t.status === 'pending').length;
+        document.getElementById('kpiResolved').innerText = scopedTickets.filter(t => t.status === 'resolved' || t.status === 'closed').length;
+
+        document.getElementById('badgeHandover').innerText = allTickets.filter(t => t.is_handover === 1 && t.status !== 'resolved').length;
+        document.getElementById('badgeApproval').innerText = allTickets.filter(t => t.status === 'pending_approval').length;
+    }
+
+    function switchView(view) {
+        currentView = view;
+        // عند الانتقال لتبويب الشفتات أو الاعتماد نعيد ضبط فلتر الـ KPI لضمان ظهور كل التذاكر الخاصة بهما
+        if (view === 'handover' || view === 'approval') {
+            kpiQuickFilter = 'all';
+        }
+        syncKpiActiveVisuals();
+
+        document.querySelectorAll('.sidebar .nav-link').forEach(l => l.classList.remove('active'));
+        if (view === 'all') document.getElementById('tabAll').classList.add('active');
+        if (view === 'kanban') document.getElementById('tabKanban').classList.add('active');
+        if (view === 'handover') document.getElementById('tabHandover').classList.add('active');
+        if (view === 'approval') document.getElementById('tabApproval').classList.add('active');
+        if (view === 'analytics') document.getElementById('tabAnalytics').classList.add('active');
+
+        document.getElementById('tableSection').style.display = (view === 'all' || view === 'handover' || view === 'approval') ? 'block' : 'none';
+        document.getElementById('kanbanSection').style.display = (view === 'kanban') ? 'block' : 'none';
+        document.getElementById('analyticsSection').style.display = (view === 'analytics') ? 'block' : 'none';
+
+        if (view === 'analytics') loadAnalyticsCharts();
+        else if (view === 'kanban') renderKanbanBoard();
+        else { currentPage = 1; renderTickets(); }
+    }
+
+    function renderKanbanBoard() {
+        const cols = { open: '', in_progress: '', pending: '', resolved: '' };
+        const isEn = i18n.getLanguage() === 'en';
+        const accLabel = isEn ? 'Account:' : 'حساب:';
+        const openTxt = i18n.t('open');
+        const emptyTxt = isEn ? 'Empty' : 'فارغ';
+        const deptFilter = document.getElementById('filterDept') ? document.getElementById('filterDept').value : '';
+        const agentFilter = document.getElementById('filterAgent') ? document.getElementById('filterAgent').value : '';
+
+        allTickets.forEach(t => {
+            if (deptFilter && String(t.department_id) !== String(deptFilter)) return;
+            if (agentFilter) {
+                if (agentFilter === 'unassigned' && t.assigned_agent_id) return;
+                if (agentFilter !== 'unassigned' && String(t.assigned_agent_id) !== String(agentFilter)) return;
+            }
+            if (kpiQuickFilter === 'open' && !(t.status === 'open' || t.status === 'pending_approval')) return;
+            if (kpiQuickFilter === 'progress' && !(t.status === 'in_progress' || t.status === 'pending')) return;
+            if (kpiQuickFilter === 'resolved' && !(t.status === 'resolved' || t.status === 'closed')) return;
+
+            const target = cols[t.status] !== undefined ? t.status : 'open';
+            cols[target] += `
+                <div class="kanban-card" draggable="true" ondragstart="dragTicket(event, ${Number(t.id)})">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-bold text-primary num-tabular">#${Number(t.id)}</span>
+                        <span class="small text-secondary fw-semibold">${escapeHtml(t.psp_name || '')}</span>
+                    </div>
+                    <div class="fw-bold small mb-1">${escapeHtml(t.title)}</div>
+                    <div class="small text-muted mb-2 num-tabular">${accLabel} ${escapeHtml(t.client_account || '-')} · ${Number(t.amount || 0)} ${escapeHtml(t.currency)}</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-info">${escapeHtml(t.dept_name || '')}</small>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-light border py-0 px-2" onclick="openQuickPeek(${Number(t.id)})" title="${i18n.t('quick_peek_btn')}"><i class="bi bi-eye"></i></button>
+                            <a href="ticket.html?id=${Number(t.id)}" class="btn btn-sm btn-outline-primary py-0 px-2">${openTxt}</a>
+                        </div>
+                    </div>
+                </div>`;
+        });
+        document.getElementById('kanban_open').innerHTML = cols.open || `<div class="text-muted small text-center py-4">${emptyTxt}</div>`;
+        document.getElementById('kanban_in_progress').innerHTML = cols.in_progress || `<div class="text-muted small text-center py-4">${emptyTxt}</div>`;
+        document.getElementById('kanban_pending').innerHTML = cols.pending || `<div class="text-muted small text-center py-4">${emptyTxt}</div>`;
+        document.getElementById('kanban_resolved').innerHTML = cols.resolved || `<div class="text-muted small text-center py-4">${emptyTxt}</div>`;
+    }
+
+    function allowDrop(ev) { ev.preventDefault(); }
+    function dragTicket(ev, id) { ev.dataTransfer.setData("ticketId", id); }
+    async function dropTicket(ev, newStatus) {
+        ev.preventDefault();
+        const id = ev.dataTransfer.getData("ticketId");
+        if (!id) return;
+        const formData = new FormData();
+        formData.append('new_status', newStatus);
+        await fetch(`/api/tickets/${id}/reply`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
+        loadTickets();
+    }
+
+    function formatDurationShort(totalMins) {
+        const absMins = Math.abs(totalMins);
+        const days = Math.floor(absMins / 1440);
+        const hrs = Math.floor((absMins % 1440) / 60);
+        const mins = absMins % 60;
+        const dUnit = i18n.t('time_day_short');
+        const hUnit = i18n.t('time_hour_short');
+        const mUnit = i18n.t('time_minute_short');
+        if (days > 0) return `${days}${dUnit} ${hrs}${hUnit}`;
+        if (hrs > 0) return `${hrs}${hUnit} ${mins}${mUnit}`;
+        return `${mins}${mUnit}`;
+    }
+
+    function formatLiveSLA(t) {
+        if (t.status === 'resolved' || t.status === 'closed') {
+            if (t.resolved_at && t.sla_due_time) {
+                const met = parseUtcDate(t.resolved_at) <= parseUtcDate(t.sla_due_time);
+                return met
+                    ? `<span class="text-success small fw-bold"><i class="bi bi-check-circle-fill"></i> ${i18n.t('sla_completed_ontime')}</span>`
+                    : `<span class="text-warning text-dark small fw-bold"><i class="bi bi-exclamation-circle-fill"></i> ${i18n.t('sla_completed_late')}</span>`;
+            }
+            return `<span class="text-success small fw-bold"><i class="bi bi-check-lg"></i> ${i18n.t('sla_completed')}</span>`;
+        }
+        if (t.sla_paused === 1) {
+            const reason = t.status === 'pending_approval' ? i18n.t('sla_paused_approval') : i18n.t('sla_paused_customer');
+            if (t.sla_due_time && t.sla_paused_at) {
+                const frozenMins = Math.floor((parseUtcDate(t.sla_due_time) - parseUtcDate(t.sla_paused_at)) / 60000);
+                if (frozenMins > 0) {
+                    return `<span class="badge bg-secondary" title="${i18n.t('sla_paused')}">${reason} • ${i18n.t('sla_remaining_header')} ${formatDurationShort(frozenMins)}</span>`;
+                }
+            }
+            return `<span class="badge bg-secondary">${reason}</span>`;
+        }
+        if (!t.sla_due_time) return '-';
+
+        const diffMs = parseUtcDate(t.sla_due_time) - new Date();
+        const diffMins = Math.floor(diffMs / 60000);
+        if (diffMins < 0) return `<span class="badge bg-danger">${i18n.t('sla_overdue')} (${formatDurationShort(diffMins)})</span>`;
+        const color = diffMins < 30 ? 'text-warning text-dark fw-bold' : 'text-muted';
+        return `<span class="small ${color}">${i18n.t('sla_remaining')} ${formatDurationShort(diffMins)}</span>`;
+    }
+
+    function changePageSize(newSize) {
+        pageSize = Number(newSize) || 25;
+        currentPage = 1;
+        renderTickets();
+    }
+
+    function goToPage(page) {
+        currentPage = page;
+        renderTickets();
+    }
+
+    function renderPagination(totalItems) {
+        const summaryEl = document.getElementById('paginationSummaryText');
+        const btnsEl = document.getElementById('paginationButtons');
+        if (!summaryEl || !btnsEl) return;
+
+        const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+
+        const startIdx = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+        const endIdx = Math.min(totalItems, currentPage * pageSize);
+
+        summaryEl.innerHTML = `${i18n.t('page_showing')} <strong>${startIdx}-${endIdx}</strong> ${i18n.t('page_of')} <strong>${totalItems}</strong>`;
+
+        let btnsHtml = `<button class="btn btn-outline-secondary" ${currentPage <= 1 ? 'disabled' : ''} onclick="goToPage(${currentPage - 1})">${i18n.t('page_prev')}</button>`;
+        const maxVisible = 5;
+        let startPage = Math.max(1, currentPage - 2);
+        let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+        if (endPage - startPage < maxVisible - 1) startPage = Math.max(1, endPage - maxVisible + 1);
+
+        for (let p = startPage; p <= endPage; p++) {
+            btnsHtml += `<button class="btn ${p === currentPage ? 'btn-primary fw-bold' : 'btn-outline-secondary'}" onclick="goToPage(${p})">${p}</button>`;
+        }
+        btnsHtml += `<button class="btn btn-outline-secondary" ${currentPage >= totalPages ? 'disabled' : ''} onclick="goToPage(${currentPage + 1})">${i18n.t('page_next')}</button>`;
+        btnsEl.innerHTML = btnsHtml;
+    }
+
+    let searchDebounceTimer = null;
+    function handleSearchDebounced(val) {
+        const clearBtn = document.getElementById('clearSearchBtn');
+        if (clearBtn) clearBtn.style.display = val ? 'inline-block' : 'none';
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+            currentPage = 1;
+            renderTickets();
+        }, 250);
+    }
+
+    function clearSearchInput() {
+        const input = document.getElementById('searchInput');
+        if (input) input.value = '';
+        const clearBtn = document.getElementById('clearSearchBtn');
+        if (clearBtn) clearBtn.style.display = 'none';
+        currentPage = 1;
+        renderTickets();
+    }
+
+    function filterByPill(status) {
+        document.querySelectorAll('.status-pill-btn').forEach(btn => btn.classList.remove('active'));
+        if (!status) {
+            const p = document.getElementById('pillAll');
+            if (p) p.classList.add('active');
+        } else if (status === 'open') {
+            const p = document.getElementById('pillOpen');
+            if (p) p.classList.add('active');
+        } else if (status === 'in_progress') {
+            const p = document.getElementById('pillProgress');
+            if (p) p.classList.add('active');
+        } else if (status === 'resolved') {
+            const p = document.getElementById('pillResolved');
+            if (p) p.classList.add('active');
+        }
+        const statusSelect = document.getElementById('filterStatus');
+        if (statusSelect) statusSelect.value = status;
+        currentPage = 1;
+        renderTickets();
+    }
+
+    function updateQuickPillCounts() {
+        if (!Array.isArray(allTickets)) return;
+        const countAll = allTickets.length;
+        const countOpen = allTickets.filter(t => t.status === 'open' || t.status === 'pending_approval').length;
+        const countProg = allTickets.filter(t => t.status === 'in_progress' || t.status === 'pending').length;
+        const countRes = allTickets.filter(t => t.status === 'resolved' || t.status === 'closed').length;
+
+        const elAll = document.getElementById('pillCountAll');
+        const elOpen = document.getElementById('pillCountOpen');
+        const elProg = document.getElementById('pillCountProgress');
+        const elRes = document.getElementById('pillCountResolved');
+
+        if (elAll) elAll.innerText = countAll;
+        if (elOpen) elOpen.innerText = countOpen;
+        if (elProg) elProg.innerText = countProg;
+        if (elRes) elRes.innerText = countRes;
+    }
+
+    function updateActiveFiltersBadge() {
+        const dept = document.getElementById('filterDept') ? document.getElementById('filterDept').value : '';
+        const agent = document.getElementById('filterAgent') ? document.getElementById('filterAgent').value : '';
+        const psp = document.getElementById('filterPsp') ? document.getElementById('filterPsp').value : '';
+        const prio = document.getElementById('filterPriority') ? document.getElementById('filterPriority').value : '';
+        
+        let count = 0;
+        if (dept) count++;
+        if (agent) count++;
+        if (psp) count++;
+        if (prio) count++;
+
+        const badge = document.getElementById('activeFiltersBadge');
+        if (badge) {
+            badge.innerText = count;
+            badge.style.display = count > 0 ? 'inline-block' : 'none';
+        }
+    }
+
+    function renderTickets() {
+        updateQuickPillCounts();
+        updateActiveFiltersBadge();
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const deptFilter = document.getElementById('filterDept') ? document.getElementById('filterDept').value : '';
+        const agentFilter = document.getElementById('filterAgent') ? document.getElementById('filterAgent').value : '';
+        const pspFilter = document.getElementById('filterPsp').value;
+        const statusFilter = document.getElementById('filterStatus').value;
+        const transFilter = document.getElementById('filterTrans').value;
+        const prioFilter = document.getElementById('filterPriority').value;
+
+        const filtered = allTickets.filter(t => {
+            if (currentView === 'handover' && t.is_handover !== 1) return false;
+            if (currentView === 'approval' && t.status !== 'pending_approval') return false;
+
+            if (kpiQuickFilter === 'open' && !(t.status === 'open' || t.status === 'pending_approval')) return false;
+            if (kpiQuickFilter === 'progress' && !(t.status === 'in_progress' || t.status === 'pending')) return false;
+            if (kpiQuickFilter === 'resolved' && !(t.status === 'resolved' || t.status === 'closed')) return false;
+
+            const matchSearch =
+                String(t.id).includes(search) ||
+                (t.title && t.title.toLowerCase().includes(search)) ||
+                (t.client_account && t.client_account.toLowerCase().includes(search)) ||
+                (t.client_email && t.client_email.toLowerCase().includes(search)) ||
+                (t.transaction_ref && t.transaction_ref.toLowerCase().includes(search)) ||
+                (t.card_dpan && t.card_dpan.toLowerCase().includes(search)) ||
+                (t.agent_name && t.agent_name.toLowerCase().includes(search));
+
+            const matchDept = !deptFilter || String(t.department_id) === String(deptFilter);
+            const matchAgent = !agentFilter || (agentFilter === 'unassigned' ? !t.assigned_agent_id : String(t.assigned_agent_id) === String(agentFilter));
+            const matchPsp = !pspFilter || t.psp_name === pspFilter;
+            const matchStatus = !statusFilter || t.status === statusFilter;
+            const matchTrans = !transFilter || t.transaction_type === transFilter;
+            const matchPrio = !prioFilter || t.priority === prioFilter;
+
+            return matchSearch && matchDept && matchAgent && matchPsp && matchStatus && matchTrans && matchPrio;
+        });
+
+        filteredTicketsCache = filtered;
+        renderPagination(filtered.length);
+
+        const tbody = document.getElementById('ticketsTableBody');
+        tbody.innerHTML = '';
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="text-center py-5">
+                        <div class="mb-2"><i class="bi bi-inbox text-secondary" style="font-size: 2.2rem;"></i></div>
+                        <div class="fw-bold mb-1">${i18n.t('no_matching_tickets')}</div>
+                        <div class="small text-muted mb-3">${i18n.t('empty_state_sub')}</div>
+                        <button type="button" class="btn btn-sm btn-outline-primary fw-bold px-3" onclick="resetFilters()">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i> ${i18n.t('btn_reset_all_filters')}
+                        </button>
+                    </td>
+                </tr>`;
+            return;
+        }
+
+        const statusMap = {
+            open: { text: i18n.t('status_open'), cls: 'st-open' },
+            pending_approval: { text: i18n.t('status_pending_approval'), cls: 'st-pending_approval' },
+            in_progress: { text: i18n.t('status_in_progress'), cls: 'st-in_progress' },
+            pending: { text: i18n.t('status_pending'), cls: 'st-pending' },
+            resolved: { text: i18n.t('status_resolved'), cls: 'st-resolved' },
+            closed: { text: i18n.t('status_closed'), cls: 'st-closed' }
+        };
+
+        const startOffset = (currentPage - 1) * pageSize;
+        const pagedTickets = filtered.slice(startOffset, startOffset + pageSize);
+
+        pagedTickets.forEach((t, index) => {
+            const st = statusMap[t.status] || { text: escapeHtml(t.status), cls: 'st-open' };
+            const handoverBadge = t.is_handover === 1 ? `<span class="badge bg-warning text-dark ms-1" title="${escapeHtml(t.handover_note || '')}">${i18n.t('badge_handover')}</span>` : '';
+            const masterBadge = t.master_ticket_id ? `<span class="badge bg-dark ms-1">${i18n.t('badge_master_sub')}${Number(t.master_ticket_id)}</span>` : '';
+            const escBadge = t.escalated === 1 ? `<span class="badge bg-danger ms-1">${i18n.t('badge_escalated')}</span>` : '';
+            const seqNumber = startOffset + index + 1;
+            const isUrgentRow = t.priority === 'urgent' && t.status !== 'resolved' && t.status !== 'closed';
+
+            tbody.innerHTML += `
+                <tr class="${isUrgentRow ? 'row-urgent' : ''}">
+                    <td><input type="checkbox" class="ticket-Check" value="${Number(t.id)}" onchange="updateBulkToolbar()"></td>
+                    <td class="fw-bold text-muted num-tabular">${seqNumber}</td>
+                    <td style="max-width: 260px;">
+                        <div class="fw-bold text-primary"><span class="num-tabular">#${Number(t.id)}</span> · <span class="text-dark">${escapeHtml(t.title)}</span> ${handoverBadge} ${masterBadge} ${escBadge}</div>
+                        <small class="text-muted">${escapeHtml(t.issue_type)}</small>
+                    </td>
+                    <td>
+                        <div class="fw-bold num-tabular">${escapeHtml(t.client_account || '-')}</div>
+                        <small class="text-muted">${escapeHtml(t.client_email || '-')}</small>
+                    </td>
+                    <td>
+                        <div class="fw-bold text-dark num-tabular">${t.amount ? Number(t.amount).toLocaleString() + ' ' + escapeHtml(t.currency) : '-'}</div>
+                        <small class="text-muted">${escapeHtml(t.psp_name || '-')} · ${escapeHtml(t.transaction_type || '-')}</small>
+                    </td>
+                    <td>
+                        <div class="small fw-bold num-tabular text-truncate" style="max-width: 140px;" title="${escapeHtml(t.transaction_ref || '-')}">${escapeHtml(t.transaction_ref || '-')}</div>
+                        <small class="text-muted num-tabular">DPAN: ${escapeHtml(t.card_dpan || '-')}</small>
+                    </td>
+                    <td>
+                        <div class="fw-semibold small">${escapeHtml(t.dept_name || '-')}</div>
+                        <small class="text-info">${escapeHtml(t.agent_name || i18n.t('unassigned'))}</small>
+                    </td>
+                    <td><span class="status-badge ${st.cls}">${st.text}</span></td>
+                    <td class="num-tabular">${formatLiveSLA(t)}</td>
+                    <td style="white-space: nowrap;">
+                        <button type="button" class="btn btn-sm btn-light border me-1" onclick="openQuickPeek(${Number(t.id)})" title="${i18n.t('quick_peek_btn')}"><i class="bi bi-eye text-primary"></i></button>
+                        <a href="ticket.html?id=${Number(t.id)}" class="btn btn-sm btn-primary fw-bold">${i18n.t('open')}</a>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    function toggleSelectAll(master) {
+        document.querySelectorAll('.ticket-Check').forEach(cb => cb.checked = master.checked);
+        updateBulkToolbar();
+    }
+
+    function updateBulkToolbar() {
+        const checked = document.querySelectorAll('.ticket-Check:checked');
+        document.getElementById('selectedCount').innerText = checked.length;
+        document.getElementById('bulkToolbar').style.display = checked.length > 0 ? 'flex' : 'none';
+    }
+
+    async function applyBulk(action) {
+        const ids = Array.from(document.querySelectorAll('.ticket-Check:checked')).map(c => Number(c.value));
+        let value = null;
+        if (action === 'status') value = document.getElementById('bulkStatus').value;
+        if (action === 'assign') value = document.getElementById('bulkAgentSelect').value;
+        if (action === 'master') value = document.getElementById('bulkMasterId').value;
+        if ((action === 'status' || action === 'assign' || action === 'master') && !value) return Swal.fire(i18n.t('warning'), i18n.t('alert_select_value_first'), 'warning');
+
+        const res = await fetch('/api/tickets/bulk-action', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticket_ids: ids, action, value })
+        });
+        if (res.ok) {
+            document.getElementById('selectAllCheckbox').checked = false;
+            updateBulkToolbar();
+            loadTickets();
+            Swal.fire({ icon: 'success', title: i18n.t('alert_bulk_done'), timer: 1200, showConfirmButton: false });
+        } else {
+            const err = await res.json();
+            Swal.fire(i18n.t('error'), err.error || i18n.t('alert_unexpected_error'), 'error');
+        }
+    }
+
+    async function submitTicket() {
+        const dept = document.getElementById('department_id').value;
+        const selectVal = document.getElementById('title_select').value;
+        const manualVal = document.getElementById('manual_title').value.trim();
+        const desc = document.getElementById('description').value.trim();
+        const finalTitle = (selectVal === 'MANUAL_ENTRY') ? manualVal : selectVal;
+
+        if (!dept || !finalTitle || !desc) {
+            return Swal.fire(i18n.t('warning'), i18n.t('alert_fill_required'), 'warning');
+        }
+
+        const formData = new FormData();
+        formData.append('department_id', dept);
+        formData.append('issue_type', document.getElementById('issue_type').value);
+        formData.append('priority', document.getElementById('priority').value);
+        formData.append('title', finalTitle);
+        formData.append('master_ticket_id', document.getElementById('master_ticket_id').value);
+        formData.append('client_account', document.getElementById('client_account').value.trim());
+        formData.append('client_email', document.getElementById('client_email').value.trim());
+        formData.append('transaction_type', document.getElementById('transaction_type').value);
+        formData.append('psp_name', document.getElementById('psp_name').value);
+        formData.append('amount', document.getElementById('amount').value);
+        formData.append('currency', document.getElementById('currency').value);
+        formData.append('transaction_ref', document.getElementById('transaction_ref').value.trim());
+        formData.append('card_dpan', document.getElementById('card_dpan').value.trim());
+        formData.append('description', desc);
+
+        const fileInput = document.getElementById('attachment');
+        if (pastedBlob) formData.append('attachment', pastedBlob, 'clipboard-screenshot.png');
+        else if (fileInput.files[0]) formData.append('attachment', fileInput.files[0]);
+
+        const res = await fetch('/api/tickets', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+
+        if (res.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('ticketModal')).hide();
+            document.getElementById('createTicketForm').reset();
+            pastedBlob = null;
+            document.getElementById('pastePreviewName').innerText = '';
+            document.getElementById('pastePreviewImg').style.display = 'none';
+            document.getElementById('duplicateWarningBox').style.display = 'none';
+            Swal.fire({ icon: 'success', title: i18n.t('alert_ticket_created'), timer: 1400, showConfirmButton: false });
+            loadTickets();
+        } else {
+            const errData = await res.json();
+            Swal.fire(i18n.t('alert_send_error'), errData.error || i18n.t('alert_unexpected_error'), 'error');
+        }
+    }
+
+    function processCsvImport() {
+        const file = document.getElementById('csvFileInput').files[0];
+        const deptId = document.getElementById('csvDeptId').value;
+        if (!file) return Swal.fire(i18n.t('warning'), i18n.t('alert_select_csv'), 'warning');
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const lines = e.target.result.split('\n').filter(l => l.trim() !== '');
+            const rows = lines.slice(1).map(line => {
+                const cols = line.split(',');
+                return {
+                    client_account: (cols[0] || '').trim(),
+                    amount: (cols[1] || '0').trim(),
+                    currency: (cols[2] || 'USD').trim(),
+                    psp_name: (cols[3] || i18n.t('csv_default_psp')).trim(),
+                    transaction_ref: (cols[4] || '-').trim(),
+                    title: (cols[5] || i18n.t('csv_default_title')).trim()
+                };
+            });
+            const res = await fetch('/api/tickets/bulk-import', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rows, department_id: deptId })
+            });
+            if (res.ok) {
+                bootstrap.Modal.getInstance(document.getElementById('csvModal')).hide();
+                loadTickets();
+                const countMsg = i18n.getLanguage() === 'en' ? `Successfully created ${rows.length} tickets` : `تم إنشاء ${rows.length} تيكت بنجاح`;
+                Swal.fire(i18n.t('alert_csv_imported'), countMsg, 'success');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    async function loadAnalyticsCharts() {
+        const deptEl = document.getElementById('analyticsFilterDept');
+        const agentEl = document.getElementById('analyticsFilterAgent');
+        const kpiEl = document.getElementById('analyticsFilterKpi');
+
+        const deptId = deptEl ? deptEl.value : '';
+        const agentId = agentEl ? agentEl.value : '';
+        if (kpiEl) kpiEl.value = kpiQuickFilter;
+
+        const params = new URLSearchParams();
+        if (deptId) params.set('department_id', deptId);
+        if (agentId) params.set('agent_id', agentId);
+        if (kpiQuickFilter && kpiQuickFilter !== 'all') params.set('kpi_filter', kpiQuickFilter);
+
+        const res = await fetch(`/api/analytics?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const isDark = document.body.classList.contains('dark-mode');
+        const isEn = i18n.getLanguage() === 'en';
+        Chart.defaults.font.family = "'Cairo', sans-serif";
+        Chart.defaults.color = isDark ? '#94a3b8' : '#475569';
+
+        // تحديث شارات الفلاتر النشطة في أعلى لوحة التحليلات
+        const badgesWrap = document.getElementById('analyticsActiveFiltersWrap');
+        if (badgesWrap) {
+            let bHtml = '';
+            if (deptId && deptEl.selectedIndex > 0) {
+                bHtml += `<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2"><i class="bi bi-building me-1"></i>${escapeHtml(deptEl.options[deptEl.selectedIndex].text)}</span>`;
+            }
+            if (agentId && agentEl.selectedIndex > 0) {
+                bHtml += `<span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2"><i class="bi bi-person-badge me-1"></i>${escapeHtml(agentEl.options[agentEl.selectedIndex].text)}</span>`;
+            }
+            if (kpiQuickFilter !== 'all' && kpiEl && kpiEl.selectedIndex >= 0) {
+                bHtml += `<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2"><i class="bi bi-funnel-fill me-1"></i>${escapeHtml(kpiEl.options[kpiEl.selectedIndex].text)}</span>`;
+            }
+            badgesWrap.innerHTML = bHtml;
+        }
+
+        // تحديث بطاقات المؤشرات التنفيذية الأربع (Executive Summary Insights)
+        const slaMet = Number(data.slaCompliance?.met || 0);
+        const slaBreached = Number(data.slaCompliance?.breached || 0);
+        const slaTotal = slaMet + slaBreached;
+        const slaRatePct = slaTotal > 0 ? Math.round((slaMet / slaTotal) * 100) : 100;
+
+        const insSlaRateEl = document.getElementById('insSlaRate');
+        if (insSlaRateEl) {
+            insSlaRateEl.innerText = `${slaRatePct}%`;
+            insSlaRateEl.className = `fw-bold mb-0 num-tabular ${slaRatePct >= 90 ? 'text-success' : (slaRatePct >= 70 ? 'text-warning' : 'text-danger')}`;
+        }
+        const insSlaCountsEl = document.getElementById('insSlaCounts');
+        if (insSlaCountsEl) insSlaCountsEl.innerText = `${slaMet} / ${slaTotal}`;
+        const insSlaBarEl = document.getElementById('insSlaBar');
+        if (insSlaBarEl) {
+            insSlaBarEl.style.width = `${slaRatePct}%`;
+            insSlaBarEl.className = `progress-bar ${slaRatePct >= 90 ? 'bg-success' : (slaRatePct >= 70 ? 'bg-warning' : 'bg-danger')}`;
+        }
+
+        const avgMttr = data.summary?.avg_mttr_mins;
+        const insMttrValEl = document.getElementById('insMttrVal');
+        if (insMttrValEl) {
+            insMttrValEl.innerText = avgMttr !== null && avgMttr !== undefined
+                ? `${Math.round(avgMttr)} ${i18n.t('mttr_minutes')}`
+                : i18n.t('none');
+        }
+        const resolvedTotal = Number(data.kpis?.resolved_tickets || 0);
+        const insResolvedCountEl = document.getElementById('insResolvedCount');
+        if (insResolvedCountEl) {
+            insResolvedCountEl.innerText = isEn ? `${resolvedTotal} resolved` : `${resolvedTotal} منجزة`;
+        }
+        const insMttrHintEl = document.getElementById('insMttrHint');
+        if (insMttrHintEl) {
+            if (!avgMttr) insMttrHintEl.innerText = isEn ? 'Awaiting resolved tickets' : 'بانتظار إغلاق التذاكر لاحتساب السرعة';
+            else if (avgMttr <= 60) insMttrHintEl.innerHTML = `<span class="text-success fw-bold">⚡ ${isEn ? 'Fast response (< 1h)' : 'استجابة سريعة (أقل من ساعة)'}</span>`;
+            else if (avgMttr <= 240) insMttrHintEl.innerHTML = `<span class="text-primary fw-bold">✓ ${isEn ? 'Within target SLA window' : 'ضمن المعدل المعياري للقسم'}</span>`;
+            else insMttrHintEl.innerHTML = `<span class="text-danger fw-bold">⚠️ ${isEn ? 'Needs attention (> 4h)' : 'يحتاج تحسين (> 4 ساعات)'}</span>`;
+        }
+
+        const totalVol = Number(data.summary?.total_volume || 0);
+        const filteredTotal = Number(data.summary?.filtered_total || 0);
+        const insTotalVolEl = document.getElementById('insTotalVol');
+        if (insTotalVolEl) insTotalVolEl.innerText = `$${totalVol.toLocaleString()}`;
+        const insFilteredBadge = document.getElementById('insFilteredCountBadge');
+        if (insFilteredBadge) insFilteredBadge.innerText = isEn ? `${filteredTotal} tickets` : `${filteredTotal} تيكت`;
+        const insTopPspHint = document.getElementById('insTopPspHint');
+        if (insTopPspHint) {
+            const topPsp = (data.byPsp && data.byPsp.length > 0) ? data.byPsp[0] : null;
+            insTopPspHint.innerText = topPsp
+                ? `${isEn ? 'Top Gateway:' : 'الأعلى نشاطاً:'} ${topPsp.psp_name} (${topPsp.count})`
+                : i18n.t('analytics_no_data');
+        }
+
+        const escCountEl = document.getElementById('insEscCount');
+        if (escCountEl) escCountEl.innerText = Number(data.summary?.escalated_count || 0);
+        const handoverCountEl = document.getElementById('insHandoverCount');
+        if (handoverCountEl) handoverCountEl.innerText = Number(data.summary?.handover_count || 0);
+
+        // تحديث عناصر بطاقة SLA الدائرية
+        const slaCenterPctEl = document.getElementById('slaCenterPercent');
+        if (slaCenterPctEl) {
+            slaCenterPctEl.innerText = `${slaRatePct}%`;
+            slaCenterPctEl.className = `fs-4 fw-bold num-tabular ${slaRatePct >= 90 ? 'text-success' : (slaRatePct >= 70 ? 'text-warning' : 'text-danger')}`;
+        }
+        const slaChartBadge = document.getElementById('slaChartTotalBadge');
+        if (slaChartBadge) slaChartBadge.innerText = `${slaTotal}`;
+        const slaMetFooter = document.getElementById('slaMetFooter');
+        if (slaMetFooter) slaMetFooter.innerText = `${slaMet}`;
+        const slaBreachedFooter = document.getElementById('slaBreachedFooter');
+        if (slaBreachedFooter) slaBreachedFooter.innerText = `${slaBreached}`;
+
+        // شريط توزيع الأولويات التفصيلي
+        const prioOrder = [
+            { key: 'urgent', label: i18n.t('priority_urgent'), cls: 'bg-danger', badgeCls: 'bg-danger-subtle text-danger border-danger-subtle' },
+            { key: 'high', label: i18n.t('priority_high'), cls: 'bg-warning', badgeCls: 'bg-warning-subtle text-warning-emphasis border-warning-subtle' },
+            { key: 'medium', label: i18n.t('priority_medium'), cls: 'bg-primary', badgeCls: 'bg-primary-subtle text-primary border-primary-subtle' },
+            { key: 'low', label: i18n.t('priority_low'), cls: 'bg-secondary', badgeCls: 'bg-secondary-subtle text-secondary border-secondary-subtle' }
+        ];
+        const prioMap = {};
+        (data.byPriority || []).forEach(p => { prioMap[p.priority] = Number(p.count || 0); });
+        const prioTotal = Object.values(prioMap).reduce((a, b) => a + b, 0);
+
+        const prioPillsEl = document.getElementById('priorityPillsContainer');
+        const prioBarEl = document.getElementById('priorityStackedBar');
+        if (prioPillsEl && prioBarEl) {
+            prioPillsEl.innerHTML = prioOrder.map(p => {
+                const cnt = prioMap[p.key] || 0;
+                const pct = prioTotal > 0 ? Math.round((cnt / prioTotal) * 100) : 0;
+                return `<span class="badge ${p.badgeCls} border num-tabular px-2 py-1">${p.label}: <strong>${cnt}</strong> (${pct}%)</span>`;
+            }).join('');
+
+            prioBarEl.innerHTML = prioTotal > 0
+                ? prioOrder.map(p => {
+                    const cnt = prioMap[p.key] || 0;
+                    const pct = (cnt / prioTotal) * 100;
+                    return `<div class="progress-bar ${p.cls}" style="width: ${pct}%" title="${p.label}: ${cnt}"></div>`;
+                }).join('')
+                : `<div class="progress-bar bg-secondary opacity-25" style="width: 100%"></div>`;
+        }
+
+        const gridColor = isDark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(148, 163, 184, 0.18)';
+
+        const renderChart = (id, type, labels, values, bgColors, options = {}) => {
+            if (charts[id]) charts[id].destroy();
+            const canvasEl = document.getElementById(id);
+            if (!canvasEl) return;
+            const ctx = canvasEl.getContext('2d');
+            
+            const colors = bgColors.map(c => {
+                if (Array.isArray(c)) {
+                    let g = ctx.createLinearGradient(0, 0, 0, 260);
+                    g.addColorStop(0, c[0]);
+                    g.addColorStop(1, c[1]);
+                    return g;
+                }
+                return c;
+            });
+
+            charts[id] = new Chart(ctx, {
+                type,
+                data: {
+                    labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: type === 'bar' ? 0 : 2,
+                        borderColor: isDark ? '#0f172a' : '#ffffff',
+                        borderRadius: type === 'bar' ? 8 : 4,
+                        maxBarThickness: 38
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: type === 'bar' ? 'none' : 'bottom',
+                            labels: { boxWidth: 12, padding: 14, font: { weight: 'bold', size: 11 } }
+                        }
+                    },
+                    ...options
+                }
+            });
+        };
+
+        // 1. مخطط الامتثال للـ SLA (Doughnut)
+        const slaChartData = (slaMet === 0 && slaBreached === 0) ? [1, 0] : [slaMet, slaBreached];
+        renderChart(
+            'slaChart',
+            'doughnut',
+            [i18n.t('chart_sla_met'), i18n.t('chart_sla_breached')],
+            slaChartData,
+            [['#10b981', '#059669'], ['#ef4444', '#dc2626']],
+            { cutout: '74%', plugins: { legend: { display: false } } }
+        );
+
+        // 2. مخطط ضغط العمل حسب الأقسام (Bar Chart)
+        const deptPalette = [
+            ['#3b82f6', '#1d4ed8'],
+            ['#6366f1', '#4338ca'],
+            ['#0ea5e9', '#0284c7'],
+            ['#8b5cf6', '#6d28d9'],
+            ['#14b8a6', '#0d9488'],
+            ['#f59e0b', '#d97706']
+        ];
+        renderChart(
+            'deptChart',
+            'bar',
+            (data.byDept || []).map(x => x.name.split(' - ')[0]),
+            (data.byDept || []).map(x => x.count),
+            (data.byDept || []).map((_, i) => deptPalette[i % deptPalette.length]),
+            {
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: gridColor } },
+                    x: { grid: { display: false } }
+                }
+            }
+        );
+
+        // 3. مخطط التذاكر حسب بوابة الدفع (Doughnut Chart)
+        const pspColors = [
+            ['#3b82f6', '#2563eb'],
+            ['#10b981', '#059669'],
+            ['#f59e0b', '#d97706'],
+            ['#8b5cf6', '#6d28d9'],
+            ['#06b6d4', '#0891b2'],
+            ['#f43f5e', '#e11d48']
+        ];
+        const pspList = (data.byPsp && data.byPsp.length > 0) ? data.byPsp : [{ psp_name: i18n.t('none'), count: 0, total_amount: 0 }];
+        renderChart(
+            'pspChart',
+            'doughnut',
+            pspList.map(x => x.psp_name),
+            pspList.map(x => x.count),
+            pspList.map((_, i) => pspColors[i % pspColors.length]),
+            {
+                cutout: '62%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 11, padding: 10, font: { size: 11, weight: 'bold' } } },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => {
+                                const item = pspList[ctx.dataIndex];
+                                const amt = item && item.total_amount ? ` ($${Number(item.total_amount).toLocaleString()})` : '';
+                                return ` ${ctx.label}: ${ctx.parsed}${amt}`;
+                            }
+                        }
+                    }
+                }
+            }
+        );
+
+        // 4. لائحة صدارة الموظفين (Enterprise Leaderboard)
+        const perfBody = document.getElementById('agentPerformanceBody');
+        const agentsRows = data.agentPerformance || [];
+
+        if (agentsRows.length === 0) {
+            perfBody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="text-center py-4 text-muted fw-bold">${i18n.t('analytics_no_data')}</td>
+                </tr>`;
+            return;
+        }
+
+        perfBody.innerHTML = agentsRows.map((ag, idx) => {
+            const totalAssigned = Number(ag.total_assigned || 0);
+            const inProgressCnt = Number(ag.in_progress_count || 0);
+            const resolvedCnt = Number(ag.resolved_count || 0);
+            const breachedCnt = Number(ag.breached_count || 0);
+            const completionRate = totalAssigned > 0 ? Math.round((resolvedCnt / totalAssigned) * 100) : 0;
+            const slaRate = totalAssigned > 0 ? Math.max(0, Math.round(((totalAssigned - breachedCnt) / totalAssigned) * 100)) : 100;
+            
+            let mttrColor = 'bg-secondary-subtle text-secondary border-secondary-subtle';
+            if (ag.avg_resolution_mins !== null && ag.avg_resolution_mins !== undefined) {
+                if (ag.avg_resolution_mins <= 60) mttrColor = 'bg-success-subtle text-success border-success-subtle';
+                else if (ag.avg_resolution_mins <= 240) mttrColor = 'bg-warning-subtle text-warning-emphasis border-warning-subtle';
+                else mttrColor = 'bg-danger-subtle text-danger border-danger-subtle';
+            }
+            const mttrText = (ag.avg_resolution_mins !== null && ag.avg_resolution_mins !== undefined)
+                ? `${Math.round(ag.avg_resolution_mins)} ${i18n.t('mttr_minutes')}`
+                : i18n.t('none');
+
+            const slaBadgeCls = slaRate >= 90
+                ? 'bg-success-subtle text-success border-success-subtle'
+                : (slaRate >= 70 ? 'bg-warning-subtle text-warning-emphasis border-warning-subtle' : 'bg-danger-subtle text-danger border-danger-subtle');
+
+            const rankNum = idx + 1;
+            const rankCls = rankNum === 1 ? 'rank-1' : (rankNum === 2 ? 'rank-2' : (rankNum === 3 ? 'rank-3' : 'rank-default'));
+            const rankIcon = rankNum === 1 ? '🥇' : (rankNum === 2 ? '🥈' : (rankNum === 3 ? '🥉' : `#${rankNum}`));
+
+            const initials = String(ag.full_name || 'U').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+            const isSelectedAgent = String(agentId) === String(ag.id);
+            const barColor = completionRate >= 85 ? 'bg-success' : (completionRate >= 50 ? 'bg-primary' : 'bg-warning');
+
+            return `
+                <tr class="leaderboard-row ${isSelectedAgent ? 'active-agent-row' : ''}" onclick="filterAnalyticsByAgentFromLeaderboard(${Number(ag.id)})" title="${i18n.t('leaderboard_filter_agent_hint')}">
+                    <td class="text-center">
+                        <span class="rank-badge ${rankCls} num-tabular">${rankIcon}</span>
+                    </td>
+                    <td class="px-3">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="agent-avatar-circle shadow-2xs">${escapeHtml(initials)}</div>
+                            <div>
+                                <div class="fw-bold text-primary d-flex align-items-center gap-2">
+                                    <span>${escapeHtml(ag.full_name)}</span>
+                                    ${isSelectedAgent ? `<span class="badge bg-primary" style="font-size:10px;">${i18n.t('analytics_active_filter_badge')}</span>` : ''}
+                                </div>
+                                <div class="small text-muted"><i class="bi bi-building me-1"></i>${escapeHtml(ag.dept_name || (isEn ? 'General Management' : 'إدارة عامة'))}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="text-center"><span class="badge bg-light text-dark border num-tabular fs-6 px-3 py-1">${totalAssigned}</span></td>
+                    <td class="text-center"><span class="badge bg-primary-subtle text-primary border border-primary-subtle num-tabular fs-6 px-3 py-1">${inProgressCnt}</span></td>
+                    <td class="text-center"><span class="badge bg-success-subtle text-success border border-success-subtle num-tabular fs-6 px-3 py-1">${resolvedCnt}</span></td>
+                    <td>
+                        <div class="d-flex justify-content-between small mb-1 fw-bold num-tabular">
+                            <span>${completionRate}%</span>
+                            <span class="text-muted fw-normal">${resolvedCnt}/${totalAssigned}</span>
+                        </div>
+                        <div class="progress" style="height: 8px; border-radius: 99px;">
+                            <div class="progress-bar ${barColor}" style="width:${completionRate}%"></div>
+                        </div>
+                    </td>
+                    <td class="text-center">
+                        <span class="badge ${slaBadgeCls} border num-tabular px-3 py-2 fw-bold">
+                            <i class="bi ${slaRate >= 90 ? 'bi-shield-check' : 'bi-exclamation-triangle'} me-1"></i>${slaRate}%
+                        </span>
+                    </td>
+                    <td class="text-center">
+                        <span class="badge ${mttrColor} border num-tabular px-3 py-2 fw-bold">${mttrText}</span>
+                    </td>
+                </tr>`;
+        }).join('');
+    }
+
+    function resetFilters() {
+        document.getElementById('searchInput').value = '';
+        const clearBtn = document.getElementById('clearSearchBtn');
+        if (clearBtn) clearBtn.style.display = 'none';
+        filterByPill('');
+        if (document.getElementById('filterDept')) document.getElementById('filterDept').value = '';
+        if (document.getElementById('analyticsFilterDept')) document.getElementById('analyticsFilterDept').value = '';
+        if (document.getElementById('filterAgent')) document.getElementById('filterAgent').value = '';
+        if (document.getElementById('analyticsFilterAgent')) document.getElementById('analyticsFilterAgent').value = '';
+        document.getElementById('filterPsp').value = '';
+        document.getElementById('filterStatus').value = '';
+        document.getElementById('filterTrans').value = '';
+        document.getElementById('filterPriority').value = '';
+        kpiQuickFilter = 'all';
+        syncKpiActiveVisuals();
+        updateKPIs();
+        currentPage = 1;
+        renderTickets();
+        if (currentView === 'kanban') renderKanbanBoard();
+        if (currentView === 'analytics') loadAnalyticsCharts();
+    }
+
+    async function openQuickPeek(id) {
+        currentQuickPeekId = id;
+        const t = allTickets.find(x => Number(x.id) === Number(id));
+        if (!t) return;
+
+        const statusMap = {
+            open: { text: i18n.t('status_open'), cls: 'st-open' },
+            pending_approval: { text: i18n.t('status_pending_approval'), cls: 'st-pending_approval' },
+            in_progress: { text: i18n.t('status_in_progress'), cls: 'st-in_progress' },
+            pending: { text: i18n.t('status_pending'), cls: 'st-pending' },
+            resolved: { text: i18n.t('status_resolved'), cls: 'st-resolved' },
+            closed: { text: i18n.t('status_closed'), cls: 'st-closed' }
+        };
+        const st = statusMap[t.status] || { text: t.status, cls: 'st-open' };
+
+        document.getElementById('qpHeaderId').innerText = `${i18n.t('quick_peek_title')} #${t.id}`;
+        const stBadge = document.getElementById('qpStatusBadge');
+        stBadge.className = `status-badge ${st.cls}`;
+        stBadge.innerText = st.text;
+        document.getElementById('qpSlaBadge').innerHTML = formatLiveSLA(t);
+        document.getElementById('qpTitle').innerText = t.title || '-';
+        document.getElementById('qpDesc').innerText = t.description || '-';
+        document.getElementById('qpAccount').innerText = t.client_account || '-';
+        document.getElementById('qpAmount').innerText = `${t.amount || 0} ${t.currency || 'USD'}`;
+        document.getElementById('qpPsp').innerText = t.psp_name || '-';
+        document.getElementById('qpAgent').innerText = t.agent_name || i18n.t('unassigned');
+        document.getElementById('qpOpenFullBtn').href = `ticket.html?id=${t.id}`;
+
+        const assignBtn = document.getElementById('qpAssignMeBtn');
+        if (assignBtn) {
+            assignBtn.style.display = (user && (user.role === 'admin' || user.role === 'agent')) ? 'inline-block' : 'none';
+        }
+
+        const drawerEl = document.getElementById('quickPeekDrawer');
+        if (drawerEl) {
+            const instance = bootstrap.Offcanvas.getOrCreateInstance(drawerEl);
+            instance.show();
+        }
+
+        const tlBox = document.getElementById('qpTimelineList');
+        tlBox.innerHTML = `<div class="skeleton-line w-100 mb-2"></div><div class="skeleton-line w-75"></div>`;
+
+        try {
+            const res = await fetch(`/api/tickets/${id}/timeline`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (res.ok) {
+                const items = await res.json();
+                const recent = items.slice(-4).reverse();
+                const locale = i18n.getLanguage() === 'en' ? 'en-US' : 'ar-EG';
+                if (recent.length === 0) {
+                    tlBox.innerHTML = `<div class="text-muted small py-2">${i18n.t('quick_peek_no_activity')}</div>`;
+                } else {
+                    tlBox.innerHTML = recent.map(it => `
+                        <div class="p-2 mb-2 rounded border ${it.action_type === 'internal_note' ? 'bg-warning bg-opacity-10 border-warning' : 'bg-light'} small">
+                            <div class="d-flex justify-content-between text-muted" style="font-size: 11px;">
+                                <strong class="text-dark">${escapeHtml(it.user_name || 'System')}</strong>
+                                <span class="num-tabular">${parseUtcDate(it.created_at).toLocaleTimeString(locale, {hour:'2-digit', minute:'2-digit'})}</span>
+                            </div>
+                            <div class="mt-1">${escapeHtml(it.content || '')}</div>
+                        </div>
+                    `).join('');
+                }
+            }
+        } catch (e) {}
+    }
+
+    async function quickPeekAssignToMe() {
+        if (!currentQuickPeekId) return;
+        const formData = new FormData();
+        formData.append('assigned_agent_id', user.id);
+        formData.append('new_status', 'in_progress');
+        const res = await fetch(`/api/tickets/${currentQuickPeekId}/reply`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+        if (res.ok) {
+            await loadTickets();
+            openQuickPeek(currentQuickPeekId);
+            Swal.fire({ toast: true, position: 'top-start', icon: 'success', title: i18n.t('reply_saved_toast'), showConfirmButton: false, timer: 1400 });
+        }
+    }
+
+    async function sendQuickPeekNote() {
+        if (!currentQuickPeekId) return;
+        const input = document.getElementById('qpQuickNoteInput');
+        const content = input.value.trim();
+        if (!content) return;
+
+        const formData = new FormData();
+        formData.append('content', content);
+        formData.append('action_type', (user && user.role === 'employee') ? 'reply' : 'internal_note');
+        const res = await fetch(`/api/tickets/${currentQuickPeekId}/reply`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+        if (res.ok) {
+            input.value = '';
+            openQuickPeek(currentQuickPeekId);
+            Swal.fire({ toast: true, position: 'top-start', icon: 'success', title: i18n.t('reply_saved_toast'), showConfirmButton: false, timer: 1400 });
+        }
+    }
+
+    function exportToCSV() {
+        const isEn = i18n.getLanguage() === 'en';
+        const escCsv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        let csv = isEn
+            ? '\uFEFFTicket #,Title,Account,PSP,Amount,Currency,Ref,DPAN,Department,Assignee,Priority,Status,Date\n'
+            : '\uFEFFرقم التيكت,العنوان,الحساب,بوابة الدفع,المبلغ,العملة,المرجع,DPAN,القسم,المستلم,الأولوية,الحالة,التاريخ\n';
+        const rowsToExport = (filteredTicketsCache && filteredTicketsCache.length > 0) ? filteredTicketsCache : allTickets;
+        rowsToExport.forEach(t => {
+            csv += [
+                t.id,
+                escCsv(t.title),
+                escCsv(t.client_account),
+                escCsv(t.psp_name),
+                escCsv(t.amount),
+                escCsv(t.currency),
+                escCsv(t.transaction_ref),
+                escCsv(t.card_dpan),
+                escCsv(t.dept_name),
+                escCsv(t.agent_name || ''),
+                escCsv(t.priority),
+                escCsv(t.status),
+                escCsv(t.created_at)
+            ].join(',') + '\n';
+        });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+        link.download = `Enterprise_Tickets_${new Date().toISOString().slice(0,10)}.csv`;
+        link.click();
+    }
+
+    function logout() { localStorage.clear(); window.location.href = 'index.html'; }
+
+    const socket = io({ auth: { token } });
+    socket.emit('register_user', user);
+
+    socket.on('online_users', (usersList) => {
+        const unique = Array.from(new Map(usersList.map(u => [u.id, u])).values());
+        document.getElementById('onlineCount').innerText = unique.length;
+        document.getElementById('onlineUsersList').innerHTML = unique.map(u => `<div>• ${escapeHtml(u.full_name)}</div>`).join('');
+    });
+
+    socket.on('targeted_notification', (data) => {
+        playBeep();
+        showDesktopNotification(data.title, data.message, data.ticket_id);
+        Swal.fire({
+            toast: true,
+            position: 'bottom-start',
+            icon: 'info',
+            title: data.title,
+            text: data.message,
+            showConfirmButton: true,
+            confirmButtonText: i18n.t('open'),
+            timer: 7000
+        }).then((r) => {
+            if (r.isConfirmed) window.location.href = `ticket.html?id=${data.ticket_id}`;
+        });
+        loadNotifications();
+        loadTickets();
+    });
+
+    socket.on('tickets_updated', () => loadTickets());
+    socket.on('config_updated', () => loadDynamicConfig());
+
+    window.addEventListener('languageChanged', () => {
+        updateUserRoleDisplay();
+        loadDynamicConfig();
+        renderTickets();
+        if (currentView === 'kanban') renderKanbanBoard();
+        if (currentView === 'analytics') loadAnalyticsCharts();
+    });
+
+    setInterval(renderTickets, 30000);
+    loadDynamicConfig();
+    loadTickets();
+    loadNotifications();
+</script>
+</body>
+</html>

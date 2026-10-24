@@ -1,0 +1,22 @@
+{
+  "apphosting": {
+    "backendId": "orbexdesk",
+    "rootDir": "/",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "backups",
+      "uploads",
+      "*.db-wal",
+      "*.db-shm",
+      "firebase-debug.log",
+      "firebase-debug.*.log"
+    ]
+  },
+  "firestore": {
+    "databaseId": "ai-studio-ticketssystem-63bbf347-7189-4c35-a17b-8de53b35432a",
+    "rules": "firestore.rules",
+    "edition": "ENTERPRISE",
+    "dataAccessMode": "FIRESTORE_NATIVE"
+  }
+}

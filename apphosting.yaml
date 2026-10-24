@@ -1,0 +1,26 @@
+# apphosting.yaml - Firebase App Hosting Configuration for OrbexDesk
+
+# Cloud Run instance specification
+runConfig:
+  cpu: 1
+  memoryMiB: 512
+  minInstances: 0
+  maxInstances: 10
+  concurrency: 80
+
+# Environment variables for build & runtime
+env:
+  - variable: NODE_ENV
+    value: production
+  - variable: PORT
+    value: "8080"
+  - variable: CORS_ORIGINS
+    value: "*"
+  - variable: JWT_SECRET
+    value: "9f8d7a6b5c4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a"
+  - variable: DPAN_ENCRYPTION_KEY
+    value: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b"
+  - variable: GEMINI_API_KEY
+    value: "AIzaSyDFRe0EV2pevoLTcdLGwgCFjOdkZSzZmlI"
+  - variable: FIREBASE_PROJECT_ID
+    value: "tickets-system-b558b"
