@@ -7,6 +7,7 @@
     "dev": "node server.js",
     "start": "node server.js",
     "build": "echo \"Build complete\"",
+    "lint": "node --check server.js database.js config/*.js controllers/*.js middlewares/*.js routes/*.js utils/*.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

@@ -23,4 +23,4 @@ env:
   - variable: GEMINI_API_KEY
     value: "AIzaSyDFRe0EV2pevoLTcdLGwgCFjOdkZSzZmlI"
   - variable: FIREBASE_PROJECT_ID
-    value: "tickets-system-b558b"
+    value: "tickets-system-512018"

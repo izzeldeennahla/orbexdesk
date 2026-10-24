@@ -33,7 +33,8 @@ const io = new Server(server, { cors: { origin: allowedOrigins } });
 // حقن كائن الـ Socket.io داخل تطبيق Express
 app.set('io', io);
 
-const PORT = process.env.PORT || 3000;
+// Port 3000 is required by AI Studio web environment
+const PORT = (process.env.PORT && process.env.PORT !== '8080') ? Number(process.env.PORT) : 3000;
 
 // ================= [ البند 4: تأمين JWT_SECRET ومنع القيم الافتراضية المكشوفة ] =================
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || process.env.JWT_SECRET === 'SuperSecretKeyForTicketingSystem2026!') {

@@ -6,15 +6,27 @@ const { getStorage } = require('firebase-admin/storage');
 const path = require('path');
 const fs = require('fs');
 
-// إعدادات الواجهة الأمامية (Frontend Firebase Config) للمشروع tickets-system-b558b
+// تحميل إعدادات Firebase من ملف firebase-applet-config.json إن وجد
+let appletConfig = {};
+try {
+    const configPath = path.join(__dirname, '../firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+        appletConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    }
+} catch (e) {
+    console.warn('⚠️ تعذر قراءة ملف firebase-applet-config.json:', e.message);
+}
+
+// إعدادات الواجهة الأمامية وFirebase Client Config
 const firebaseClientConfig = {
-    apiKey: process.env.FIREBASE_API_KEY || "AIzaSyA_qiU44rbl_lPSCu83FPUnpXDELGSRMU8",
-    authDomain: process.env.FIREBASE_AUTH_DOMAIN || "tickets-system-b558b.firebaseapp.com",
-    projectId: process.env.FIREBASE_PROJECT_ID || "tickets-system-b558b",
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "tickets-system-b558b.firebasestorage.app",
-    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "321737048489",
-    appId: process.env.FIREBASE_APP_ID || "1:321737048489:web:ab90f057259f29005004b8",
-    measurementId: process.env.FIREBASE_MEASUREMENT_ID || "G-4ZZ9LX18SK"
+    apiKey: process.env.FIREBASE_API_KEY || appletConfig.apiKey || "AIzaSyDhIpnjDtoWtOnjBu58PvwYkEQAlX3CewY",
+    authDomain: process.env.FIREBASE_AUTH_DOMAIN || appletConfig.authDomain || "tickets-system-512018.firebaseapp.com",
+    projectId: process.env.FIREBASE_PROJECT_ID || appletConfig.projectId || "tickets-system-512018",
+    firestoreDatabaseId: process.env.FIRESTORE_DATABASE_ID || appletConfig.firestoreDatabaseId || "ai-studio-ticketssystem-63bbf347-7189-4c35-a17b-8de53b35432a",
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || appletConfig.storageBucket || "tickets-system-512018.firebasestorage.app",
+    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || appletConfig.messagingSenderId || "232961669914",
+    appId: process.env.FIREBASE_APP_ID || appletConfig.appId || "1:232961669914:web:a5dac83c07b768726bcaa3",
+    measurementId: process.env.FIREBASE_MEASUREMENT_ID || appletConfig.measurementId || ""
 };
 
 let serviceAccount = null;
@@ -31,9 +43,8 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 // 2. البحث عن ملف حساب الخدمة المرفق (Service Account JSON)
 if (!serviceAccount) {
     const candidatePaths = [
-        path.join(__dirname, 'tickets-system-b558b-firebase-adminsdk-fbsvc-75f3e7511f.json'),
         path.join(__dirname, 'serviceAccountKey.json'),
-        path.join(__dirname, '../tickets-system-b558b-firebase-adminsdk-fbsvc-75f3e7511f.json')
+        path.join(__dirname, '../serviceAccountKey.json')
     ];
 
     for (const filePath of candidatePaths) {
@@ -78,7 +89,12 @@ try {
     console.error('❌ خطأ في تهيئة Firebase Admin:', initErr.message);
 }
 
-const firestoreDb = isFirebaseInitialized ? getFirestore(firebaseApp) : null;
+const firestoreDb = isFirebaseInitialized
+    ? (firebaseClientConfig.firestoreDatabaseId && firebaseClientConfig.firestoreDatabaseId !== '(default)'
+        ? getFirestore(firebaseApp, firebaseClientConfig.firestoreDatabaseId)
+        : getFirestore(firebaseApp))
+    : null;
+
 if (firestoreDb) {
     try {
         firestoreDb.settings({ ignoreUndefinedProperties: true });
@@ -86,7 +102,7 @@ if (firestoreDb) {
 }
 
 const adminAuth = isFirebaseInitialized ? getAuth(firebaseApp) : null;
-const storageBucket = isFirebaseInitialized ? getStorage(firebaseApp).bucket(firebaseClientConfig.storageBucket) : null;
+const storageBucket = isFirebaseInitialized && firebaseClientConfig.storageBucket ? getStorage(firebaseApp).bucket(firebaseClientConfig.storageBucket) : null;
 
 module.exports = {
     admin,
